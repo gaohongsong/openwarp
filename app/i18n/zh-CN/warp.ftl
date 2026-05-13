@@ -6,8 +6,8 @@
 # SECTION: common (Owner: foundation)
 # =============================================================================
 
-app-name = Warp
-app-tagline = 面向个人与团队的云端终端
+app-name = OpenWarp
+app-tagline = 面向个人与团队的本地智能终端
 
 common-ok = 确定
 common-cancel = 取消
@@ -120,7 +120,7 @@ agent-management-artifact-screenshot = 截图
 agent-management-artifact-file = 文件
 agent-management-source-scheduled = 定时
 agent-management-source-local-agent = Warp（本地智能体）
-agent-management-source-cloud-agent = Warp（云端智能体）
+agent-management-source-cloud-agent = Warp（本地智能体）
 agent-management-source-oz-web = Oz Web
 agent-management-source-github-action = GitHub Action
 agent-management-no-session-available = 无可用会话
@@ -131,7 +131,7 @@ agent-management-metadata-harness = 执行器：{ $harness }
 agent-management-metadata-run-time = 运行时长：{ $run_time }
 agent-management-metadata-credits-used = 已用额度：{ $usage }
 agent-management-environment-selected = 环境：{ $environment }
-agent-management-loading-cloud-runs = 正在加载云端智能体运行
+agent-management-loading-cloud-runs = 正在加载智能体运行
 
 # =============================================================================
 # SECTION: workspace-runtime (Owner: agent-i18n-remaining)
@@ -161,7 +161,7 @@ workspace-search-tabs-placeholder = 搜索标签页...
 workspace-rearrange-toolbar-items = 重新排列工具栏项目
 workspace-new-session-agent = 智能体
 workspace-new-session-terminal = 终端
-workspace-new-session-cloud-oz = 云端 Oz
+workspace-new-session-cloud-oz = 智能体标签页
 workspace-new-session-local-docker-sandbox = 本地 Docker 沙箱
 workspace-new-worktree-config = 新建 worktree 配置
 workspace-new-tab-config = 新建标签页配置
@@ -212,7 +212,6 @@ app-menu-warp-slack-community = Warp Slack 社区...
 workspace-update-and-relaunch-warp = 更新并重启 Warp
 workspace-updating-to-version = 正在更新到（{ $version }）
 workspace-update-warp-manually = 手动更新 Warp
-workspace-view-all-cloud-runs = 查看所有云端运行
 pane-get-started-title = 开始使用
 pane-new-tab-title = 新建标签页
 
@@ -234,7 +233,7 @@ terminal-dont-ask-again = 不再询问
 terminal-clear-upload = 清除上传
 terminal-manage-defaults = 管理默认值
 terminal-free-credits = 免费额度
-terminal-cloud-agent-run = 云端智能体运行
+terminal-cloud-agent-run = 智能体运行
 terminal-agent-header-for-terminal = 用于终端
 ssh-remote-choice-title = 为此远程会话选择体验：
 ssh-remote-choice-install-extension = 安装 Warp 的 SSH 扩展
@@ -334,7 +333,7 @@ openwarp-launch-contribute-title = 参与贡献
 openwarp-launch-contribute-description = Warp 客户端代码现已开源。你可以先使用 /feedback skill 创建 issue，并阅读这里的贡献指南。
 openwarp-launch-contribute-link-text = 这里
 openwarp-launch-oad-title = 开放自动化开发
-openwarp-launch-oad-description = Warp 仓库由智能体优先的工作流管理，并由我们的云端智能体编排平台 Oz 提供支持。
+openwarp-launch-oad-description = Warp 仓库由智能体优先的本地工作流管理，并由 Oz 本地智能体体验提供支持。
 openwarp-launch-auto-model-title = 介绍「auto（开放权重）」
 openwarp-launch-auto-model-description = 我们新增了一个 auto 模型，可为任务选择最佳开放权重模型，例如 Kimi 或 MiniMax。
 hoa-see-whats-new = 查看新变化
@@ -359,8 +358,8 @@ settings-startup-shell-executable-path-placeholder = 可执行文件路径
 settings-agent-providers-base-url-placeholder = https://api.deepseek.com/v1
 drive-sharing-only-people-invited = 仅受邀者
 drive-sharing-anyone-with-link = 拥有链接的任何人
-drive-sharing-only-invited-teammates = 仅受邀团队成员
-drive-sharing-teammates-with-link = 拥有链接的团队成员
+drive-sharing-only-invited-teammates = 仅限本地访问
+drive-sharing-teammates-with-link = 拥有链接的本地访问
 terminal-warpify-subshell = Warpify subshell
 terminal-warpify-subshell-tooltip = 在此会话中启用 Warp shell 集成
 terminal-use-agent = 使用智能体
@@ -377,7 +376,6 @@ terminal-continue-locally = 在本地继续
 terminal-fork-conversation-locally-tooltip = 将此对话 fork 到本地
 terminal-open-in-warp = 在 Warp 中打开
 terminal-open-conversation-in-warp-tooltip = 在 Warp 桌面端打开此对话
-terminal-share-session = 分享会话...
 terminal-stop-sharing = 停止分享
 terminal-copy-session-sharing-link = 复制会话分享链接
 terminal-shared-session-make-editor = 设为编辑者
@@ -387,7 +385,7 @@ terminal-choose-execution-profile-tooltip = 选择 AI 执行配置
 terminal-choose-agent-model-tooltip = 选择智能体模型
 terminal-input-cli-agent-rich-input-hint = 告诉智能体要构建什么...
 terminal-input-enter-prompt-for-agent = 输入给 { $agent } 的提示...
-terminal-input-cloud-agent-hint = 启动云端智能体
+terminal-input-cloud-agent-hint = 启动智能体
 terminal-input-a11y-label = 命令输入。
 terminal-input-a11y-helper = 输入 shell 命令，按 Enter 执行。按 cmd-up 导航到之前执行命令的输出。按 cmd-l 重新聚焦命令输入框。
 terminal-input-ai-command-search-hint = 输入 '#' 获取 AI 命令建议
@@ -563,7 +561,6 @@ settings-section-keybindings = 快捷键
 settings-section-privacy = 隐私
 settings-section-referrals = 推荐
 settings-section-shared-blocks = 共享命令块
-settings-section-teams = 团队
 settings-section-warp-drive = Warp Drive
 settings-section-warpify = Warpify
 settings-section-ai = AI
@@ -576,7 +573,7 @@ settings-section-third-party-cli-agents = 第三方 CLI 智能体
 settings-section-code = 代码
 settings-section-editor-and-code-review = 编辑器与代码评审
 settings-section-cloud-environments = 环境
-settings-section-oz-cloud-api-keys = Oz Cloud API 密钥
+settings-section-oz-cloud-api-keys = Agent API 密钥
 settings-title = 设置
 
 # 上下文菜单项（分屏 / 关闭窗格）
@@ -607,7 +604,8 @@ settings-about-update-open-release = 前往 GitHub 下载
 # main_page.rs — referral / account
 settings-main-referral-cta = 与朋友和同事分享 Warp，获得奖励
 settings-main-refer-a-friend = 推荐朋友
-settings-main-sign-up = 注册
+settings-main-sign-up = 本地配置
+settings-main-local-profile = 本地配置
 settings-main-plan-free = 免费版
 settings-main-compare-plans = 对比方案
 settings-main-contact-support = 联系支持
@@ -642,21 +640,21 @@ settings-mcp-install-from-link-failed = MCP 服务器 '{$name}' 无法通过此�
 
 # ---- destructive_mcp_confirmation_dialog.rs ----
 settings-mcp-confirm-delete-local-title = 删除 MCP 服务器？
-settings-mcp-confirm-delete-local-description = 这将从你所有的设备上卸载并移除此 MCP 服务器。
-settings-mcp-confirm-delete-shared-title = 删除共享的 MCP 服务器？
-settings-mcp-confirm-delete-shared-description = 此操作不仅会为你自己删除此 MCP 服务器，还会从 Warp 以及所有团队成员的设备上卸载并移除此 MCP 服务器。
-settings-mcp-confirm-unshare-title = 从团队中移除共享的 MCP 服务器？
-settings-mcp-confirm-unshare-description = 这将从 Warp 以及所有团队成员的设备上卸载并移除此 MCP 服务器。
+settings-mcp-confirm-delete-local-description = 这将从本设备卸载并移除此 MCP 服务器。
+settings-mcp-confirm-delete-shared-title = 删除 MCP 服务器？
+settings-mcp-confirm-delete-shared-description = 此操作会从这台设备移除已保存的 MCP 服务器。
+settings-mcp-confirm-unshare-title = 移除已保存的 MCP 服务器？
+settings-mcp-confirm-unshare-description = 此操作会从这台设备移除已保存的 MCP 服务器。
 settings-mcp-confirm-delete-button = 删除 MCP
-settings-mcp-confirm-remove-from-team-button = 从团队移除
+settings-mcp-confirm-remove-from-team-button = 移除本地副本
 settings-mcp-confirm-cancel-button = 取消
 
 # ---- edit_page.rs ----
 settings-mcp-edit-save = 保存
 settings-mcp-edit-edit-variables = 编辑变量
 settings-mcp-edit-delete = 删除 MCP
-settings-mcp-edit-remove-from-team = 从团队移除
-settings-mcp-edit-editing-disabled-banner = 仅团队管理员和 MCP 服务器的创建者可以编辑此 MCP 服务器。
+settings-mcp-edit-remove-from-team = 移除本地副本
+settings-mcp-edit-editing-disabled-banner = 此视图无法编辑该 MCP 服务器。
 settings-mcp-edit-add-new-title = 添加新 MCP 服务器
 settings-mcp-edit-edit-named-title = 编辑 { $name } MCP 服务器
 settings-mcp-edit-edit-title = 编辑 MCP 服务器
@@ -667,14 +665,14 @@ settings-mcp-edit-multiple-servers-error = 编辑单个服务器时无法添加�
 
 # ---- installation_modal.rs ----
 settings-mcp-install-modal-title = 安装 { $name }
-settings-mcp-install-modal-source-shared = 团队共享
+settings-mcp-install-modal-source-shared = 已保存预设
 settings-mcp-install-modal-source-other-device = 来自其他设备
 settings-mcp-install-modal-cancel = 取消
 settings-mcp-install-modal-install = 安装
 settings-mcp-install-modal-no-server = 未选择 MCP 服务器
 
 # ---- list_page.rs ----
-settings-mcp-list-description = 添加 MCP 服务器以扩展 Warp Agent 的能力。MCP 服务器通过标准化接口向 agent 暴露数据源或工具，本质上类似插件。你可以添加自定义服务器，或使用预设快速开始使用流行的服务器。你也可以在此找到团队共享给你的服务器。
+settings-mcp-list-description = 添加 MCP 服务器以扩展 Warp Agent 的能力。MCP 服务器通过标准化接口向 agent 暴露数据源或工具，本质上类似插件。你可以添加自定义服务器，或使用预设快速开始使用流行的服务器。
 settings-mcp-list-learn-more = 了解更多。
 settings-mcp-list-empty-state = 添加 MCP 服务器后，它将显示在此处。
 settings-mcp-list-no-search-results = 未找到搜索结果
@@ -687,13 +685,13 @@ settings-mcp-list-template-available-to-install = 可安装
 settings-mcp-list-file-based-detected = 来自配置文件的检测
 settings-mcp-list-toast-server-updated = MCP 服务器已更新
 settings-mcp-list-section-my-mcps = 我的 MCP
-settings-mcp-list-section-shared-by-warp-and-team = 由 Warp 和 { $name } 共享
+settings-mcp-list-section-shared-by-warp-and-team = 来自 Warp 和 { $name }
 settings-mcp-list-section-shared-by-warp-and-other-devices = 由 Warp 和其他设备共享
 settings-mcp-list-section-shared-from-warp = 来自 Warp 的共享
 settings-mcp-list-section-detected-from = 检测自 { $provider }
 settings-mcp-list-chip-global = 全局
 settings-mcp-list-chip-shared-by-creator = 由 { $creator } 共享
-settings-mcp-list-chip-shared-by-team-member = 由团队成员共享
+settings-mcp-list-chip-shared-by-team-member = 已保存预设
 settings-mcp-list-chip-from-another-device = 来自其他设备
 
 # ---- server_card.rs ----
@@ -717,7 +715,7 @@ settings-mcp-update-modal-default-name = 服务器
 settings-mcp-update-modal-title = 更新 { $name }
 settings-mcp-update-modal-description = 此服务器有 { $count } 个可用更新，你想使用哪一个？
 settings-mcp-update-modal-publisher-another-device = 其他设备
-settings-mcp-update-modal-publisher-team-member = 团队成员
+settings-mcp-update-modal-publisher-team-member = 本地来源
 settings-mcp-update-modal-update-from = 来自 { $publisher } 的更新
 settings-mcp-update-modal-version = 版本 { $version }
 settings-mcp-update-modal-cancel = 取消
@@ -725,8 +723,8 @@ settings-mcp-update-modal-update = 更新
 settings-mcp-update-modal-no-updates = 暂无可用更新
 
 # --- ANCHOR-SUB-PLATFORM (agent-settings-platform) ---
-settings-platform-section-title = Oz Cloud API 密钥
-settings-platform-description = 创建并管理 API 密钥，允许其他 Oz 云端 agent 访问你的 Warp 账户。
+settings-platform-section-title = Agent API 密钥
+settings-platform-description = 创建并管理 API 密钥，允许本地 agent 访问你的 Warp 账户。
     了解更多请访问
 settings-platform-documentation-link = 文档。
 settings-platform-create-button = + 创建 API 密钥
@@ -772,14 +770,14 @@ settings-keybindings-press-new-shortcut = 按下新的快捷键
 settings-keybindings-description = 在下方为已有操作添加你自己的自定义快捷键。
 settings-keybindings-use-prefix = 使用
 settings-keybindings-use-suffix = 可随时在侧边栏中参考这些快捷键。
-settings-keybindings-not-synced-tooltip = 快捷键不会同步到云端
+settings-keybindings-not-synced-tooltip = 快捷键仅保存在本机
 settings-keybindings-subheader = 配置键盘快捷键
 settings-keybindings-command-column = 命令
 
 # --- ANCHOR-SUB-REFERRALS (agent-settings-referrals) ---
 settings-referrals-page-title = 邀请朋友加入 Warp
-settings-referrals-anonymous-header = 注册以参与 Warp 推荐计划
-settings-referrals-sign-up = 注册
+settings-referrals-anonymous-header = 本地 OpenWarp 构建不提供推荐计划
+settings-referrals-sign-up = 本地不可用
 settings-referrals-link-label = 链接
 settings-referrals-email-label = 邮箱
 settings-referrals-link-error = 加载邀请码失败。
@@ -890,8 +888,8 @@ settings-ai-agents-description = 设定智能体的运行边界：它能访问�
 settings-ai-profiles-description = 配置让你定义智能体的运行方式 —— 包括它可执行的动作、何时需要审批，以及编码、规划等任务使用的模型。你也可以将其作用于具体项目。
 
 # 匿名 / 组织限制
-settings-ai-sign-up = 注册
-settings-ai-anonymous-create-account = 要使用 AI 功能，请先创建账户。
+settings-ai-sign-up = 启用本地 AI
+settings-ai-anonymous-create-account = 本地 AI 功能不需要账户。
 settings-ai-org-disallows-remote-session = 当活动窗格包含来自远程会话的内容时，你的组织禁止使用 AI
 settings-ai-org-enforced-tooltip = 此选项由你所在组织的设置强制启用，无法自定义。
 settings-ai-restricted-billing = 因账单问题受限
@@ -950,9 +948,9 @@ settings-ai-toolbar-commands-description = 添加正则表达式，匹配的命�
 settings-ai-coding-agent-other = 其他
 settings-ai-coding-agent-select-header = 选择编码智能体
 
-# 实验性 / Cloud Agent
-settings-ai-cloud-agent-computer-use = 在 Cloud Agent 中启用计算机使用
-settings-ai-cloud-agent-computer-use-description = 在 Warp 应用中启动的 Cloud Agent 会话中启用计算机使用。
+# 实验性 / 智能体
+settings-ai-cloud-agent-computer-use = 在智能体中启用计算机使用
+settings-ai-cloud-agent-computer-use-description = 在 Warp 应用中启动的智能体会话中启用计算机使用。
 settings-ai-orchestration-label = 编排
 settings-ai-orchestration-description = 启用多智能体编排，允许智能体派生并协调并行的子智能体。
 
@@ -991,7 +989,7 @@ settings-features-max-rows-per-block = 命令块最大行数
 settings-features-ssh-wrapper = Warp SSH 包装器
 settings-features-receive-desktop-notifications = 接收来自 Warp 的桌面通知
 settings-features-show-in-app-agent-notifications = 显示应用内 Agent 通知
-settings-features-confirm-close-shared-session = 关闭共享会话前确认
+settings-features-confirm-close-shared-session = 关闭只读会话前确认
 settings-features-global-hotkey-label = 全局快捷键：
 settings-features-global-hotkey-not-supported-on-wayland = Wayland 下不支持。
 settings-features-autocomplete-symbols = 自动补全引号、圆括号和方括号
@@ -1088,92 +1086,6 @@ settings-features-changes-apply-new-windows = 更改会应用到新窗口。
 settings-features-wayland-description = 启用此设置会禁用全局快捷键支持。禁用时，如果 Wayland 合成器使用分数缩放（例如 125%），文本可能会发虚。
 settings-features-restart-warp-to-apply = 重启 Warp 以使更改生效。
 
-# --- ANCHOR-SUB-TEAMS (agent-settings-teams) ---
-settings-teams-page-title = 团队
-settings-teams-create-page-subtitle = 创建团队
-settings-teams-create-description = 创建团队后，您可以通过共享云端 agent 运行、环境、自动化与产物来协作进行 agent 驱动开发，也可以为队友与 agent 共享一个统一的知识库。
-settings-teams-create-button = 创建
-settings-teams-team-name-placeholder = 团队名称
-settings-teams-rename-placeholder = 新的团队名称
-settings-teams-leave-team-button = 退出团队
-settings-teams-delete-team-button = 删除团队
-settings-teams-emails-placeholder = 邮箱（逗号分隔）
-settings-teams-domains-placeholder = 域名（逗号分隔）
-settings-teams-set-button = 设置
-settings-teams-invite-button = 邀请
-settings-teams-join-button = 加入
-settings-teams-contact-admin-button = 联系管理员申请访问
-settings-teams-tab-link = 邀请链接
-settings-teams-tab-email = 邮箱邀请
-settings-teams-section-team-members = 团队成员
-settings-teams-section-team-members-pricing = 团队成员
-settings-teams-section-invite-by-link = 通过链接邀请
-settings-teams-section-invite-by-email = 通过邮箱邀请
-settings-teams-section-restrict-by-domain = 按域名限制
-settings-teams-section-make-discoverable = 设为可被发现
-settings-teams-section-plan-usage-free = 免费方案用量限制
-settings-teams-section-plan-usage = 方案用量限制
-settings-teams-shared-notebooks = 共享笔记本
-settings-teams-shared-workflows = 共享工作流
-settings-teams-reset-links = 重置链接
-settings-teams-compare-plans = 对比方案
-settings-teams-upgrade-build = 升级到 Build
-settings-teams-upgrade-turbo = 升级到 Turbo 方案
-settings-teams-upgrade-lightspeed = 升级到 Lightspeed 方案
-settings-teams-contact-support = 联系支持
-settings-teams-manage-billing = 管理账单
-settings-teams-manage-plan = 管理方案
-settings-teams-open-admin-panel = 打开管理员面板
-settings-teams-or-join-existing = 或加入您公司内已有的团队
-settings-teams-discovery-cta = 加入此团队，开始一起协作工作流、笔记本等内容。
-settings-teams-discovery-1-teammate = 1 名队友
-settings-teams-discovery-n-teammates = { $count } 名队友
-settings-teams-transfer-modal-title = 转移团队所有权？
-settings-teams-action-cancel-invite = 取消邀请
-settings-teams-action-transfer-ownership = 转移所有权
-settings-teams-action-demote-from-admin = 取消管理员
-settings-teams-action-promote-to-admin = 设为管理员
-settings-teams-action-remove-from-team = 从团队移除
-settings-teams-action-remove-domain = 移除域名
-settings-teams-state-expired = 已过期
-settings-teams-state-pending = 待处理
-settings-teams-state-owner = 拥有者
-settings-teams-state-admin = 管理员
-settings-teams-badge-past-due = 已逾期
-settings-teams-badge-unpaid = 未付款
-settings-teams-offline = 您当前处于离线状态。
-settings-teams-failed-load-invite-link = 加载邀请链接失败。
-settings-teams-toast-link-copied = 链接已复制到剪贴板！
-settings-teams-toast-invite-sent-one = 邀请已发出！
-settings-teams-toast-invites-sent = 已发出 { $count } 封邀请！
-settings-teams-toast-domain-added = 已添加域名限制：{ $count }
-settings-teams-toast-invalid-domains = 无效域名：{ $count }
-settings-teams-toast-invalid-emails = 无效邮箱：{ $count }
-settings-teams-toast-toggled-invite-links = 已切换邀请链接状态
-settings-teams-toast-reset-invite-links = 已重置邀请链接
-settings-teams-toast-deleted-invite = 已删除邀请
-settings-teams-toast-toggled-discoverability = 已切换团队可发现状态
-settings-teams-toast-joined-team = 已成功加入团队
-settings-teams-toast-joined-team-named = 已成功加入 { $name }
-settings-teams-toast-transferred-ownership = 已成功转移团队所有权
-settings-teams-toast-updated-role = 已成功更新团队成员角色
-settings-teams-toast-left-team = 已成功退出团队
-settings-teams-toast-renamed-team = 已成功重命名团队
-settings-teams-error-leave-team = 退出团队失败
-settings-teams-error-rename-team = 重命名团队失败
-settings-teams-error-send-invite = 发送邀请失败
-settings-teams-error-toggle-invite-links = 切换邀请链接失败
-settings-teams-error-reset-invite-links = 重置邀请链接失败
-settings-teams-error-delete-invite = 删除邀请失败
-settings-teams-error-add-domain = 添加域名限制失败
-settings-teams-error-delete-domain = 删除域名限制失败
-settings-teams-error-upgrade-link = 生成升级链接失败，请联系 feedback@warp.dev
-settings-teams-error-billing-link = 生成账单链接失败，请联系 feedback@warp.dev
-settings-teams-error-toggle-discoverability = 切换团队可发现状态失败
-settings-teams-error-join-team = 加入团队失败
-settings-teams-error-transfer-ownership = 转移团队所有权失败
-settings-teams-error-update-role = 更新团队成员角色失败
-
 # --- ANCHOR-SUB-SETTINGS-PAGE-NAV (agent-settings-page-nav) ---
 
 # ---- settings_page.rs ----
@@ -1216,9 +1128,9 @@ settings-privacy-safe-mode-description = 启用此设置后，Warp 会扫描 Blo
 settings-privacy-user-secret-regex-title = 自定义敏感信息混淆
 settings-privacy-user-secret-regex-description = 使用正则表达式定义你希望额外混淆的敏感信息或数据。规则将在下一条命令执行时生效。可在正则表达式前加 (?i) 标志使其忽略大小写。
 settings-privacy-telemetry-title = 帮助改进 Warp
-settings-privacy-telemetry-description = 应用分析数据帮助我们为你改进产品。我们可能会采集部分控制台交互数据，用于改进 Warp 的 AI 能力。
-settings-privacy-telemetry-description-old = 应用分析数据帮助我们为你改进产品。我们仅采集应用使用元数据，绝不采集控制台输入或输出内容。
-settings-privacy-telemetry-free-tier-note = 免费版必须启用分析才能使用 AI 功能。
+settings-privacy-telemetry-description = OpenWarp 默认不启用外发分析。本地 Agent 功能不需要分析数据。
+settings-privacy-telemetry-description-old = OpenWarp 默认不启用外发分析。除非你配置外部服务商，控制台输入和输出会保留在本机。
+settings-privacy-telemetry-free-tier-note = 本地 Agent 功能不需要分析数据。
 settings-privacy-telemetry-docs-link = 详细了解 Warp 如何使用数据
 settings-privacy-data-management-title = 管理你的数据
 settings-privacy-data-management-description = 你可以随时选择永久删除 Warp 账户。删除后将无法继续使用 Warp。
@@ -1239,9 +1151,9 @@ settings-privacy-secret-display-mode-title = 敏感信息可视化混淆模式
 settings-privacy-secret-display-mode-description = 选择敏感信息在 Block 列表中的视觉呈现方式，同时保持可搜索。此设置仅影响 Block 列表中的显示。
 settings-privacy-crash-reports-title = 发送崩溃报告
 settings-privacy-crash-reports-description = 崩溃报告有助于排查问题并提升稳定性。
-settings-privacy-cloud-conv-title = 将 AI 对话存储到云端
-settings-privacy-cloud-conv-description-on = 智能体对话可与他人共享，并在你于其它设备登录时保留。此数据仅用于产品功能，Warp 不会将其用于分析。
-settings-privacy-cloud-conv-description-off = 智能体对话仅本地存储，登出后丢失，且无法共享。注意：Ambient Agent 的对话数据仍存储在云端。
+settings-privacy-cloud-conv-title = 将 AI 对话存储到本地
+settings-privacy-cloud-conv-description-on = 智能体对话会存储在这台机器上，用于本地产品功能。
+settings-privacy-cloud-conv-description-off = 智能体对话仅存储在这台机器上，清除本地数据时会被移除。
 settings-privacy-org-managed-tooltip = 此设置由你所在组织管理。
 settings-privacy-network-log-title = 网络日志控制台
 settings-privacy-network-log-description = 我们构建了原生控制台，允许你查看 Warp 与外部服务器的全部通信，让你确信工作始终安全。
@@ -1485,7 +1397,7 @@ settings-environments-page-description = 环境定义了你的 ambient agent 在
 settings-environments-search-placeholder = 搜索环境...
 settings-environments-no-matches = 没有符合搜索条件的环境。
 settings-environments-section-personal = 个人
-settings-environments-section-team-default = 由 Warp 和你的团队共享
+settings-environments-section-team-default = 由 Warp 和本地设备提供
 settings-environments-section-team-named = 由 Warp 和 { $team } 共享
 settings-environments-env-id-prefix = 环境 ID:{ $id }
 settings-environments-detail-image = 镜像：{ $image }
@@ -1674,16 +1586,10 @@ keybinding-desc-pane-group-navigate-next = 激活下一个窗格
 
 # 鼠标 / 笔记本 / 工作流 / 文件夹
 keybinding-desc-workspace-toggle-mouse-reporting = 切换鼠标报告
-keybinding-desc-workspace-create-team-notebook = 新建团队笔记本
-keybinding-desc-workspace-create-team-notebook-menu = 新建团队笔记本
 keybinding-desc-workspace-create-personal-notebook = 新建个人笔记本
 keybinding-desc-workspace-create-personal-notebook-menu = 新建个人笔记本
-keybinding-desc-workspace-create-team-workflow = 新建团队工作流
-keybinding-desc-workspace-create-team-workflow-menu = 新建团队工作流
 keybinding-desc-workspace-create-personal-workflow = 新建个人工作流
 keybinding-desc-workspace-create-personal-workflow-menu = 新建个人工作流
-keybinding-desc-workspace-create-team-folder = 新建团队文件夹
-keybinding-desc-workspace-create-team-folder-menu = 新建团队文件夹
 keybinding-desc-workspace-create-personal-folder = 新建个人文件夹
 keybinding-desc-workspace-create-personal-folder-menu = 新建个人文件夹
 
@@ -1691,7 +1597,7 @@ keybinding-desc-workspace-create-personal-folder-menu = 新建个人文件夹
 keybinding-desc-workspace-new-tab = 创建新标签页
 keybinding-desc-workspace-new-terminal-tab = 新建终端标签页
 keybinding-desc-workspace-new-agent-tab = 新建 Agent 标签页
-keybinding-desc-workspace-new-cloud-agent-tab = 新建云 Agent 标签页
+keybinding-desc-workspace-new-cloud-agent-tab = 新建 Agent 标签页
 new-session-create-new-tab = 新建标签页
 new-session-create-new-window = 新建窗口
 new-session-split-pane-down = 向下拆分窗格
@@ -1772,20 +1678,15 @@ keybinding-desc-workspace-uninstall-cli = 卸载 Oz CLI 命令
 keybinding-desc-workspace-toggle-ai-assistant = 切换 Warp AI
 
 # 环境变量 / Prompt
-keybinding-desc-workspace-create-team-env-vars = 新建团队环境变量
-keybinding-desc-workspace-create-team-env-vars-menu = 新建团队环境变量
 keybinding-desc-workspace-create-personal-env-vars = 新建个人环境变量
 keybinding-desc-workspace-create-personal-env-vars-menu = 新建个人环境变量
 keybinding-desc-workspace-create-personal-ai-prompt = 新建个人 Prompt
 keybinding-desc-workspace-create-personal-ai-prompt-menu = 新建个人 Prompt
-keybinding-desc-workspace-create-team-ai-prompt = 新建团队 Prompt
-keybinding-desc-workspace-create-team-ai-prompt-menu = 新建团队 Prompt
 
 # 焦点 / 导入
 keybinding-desc-workspace-shift-focus-left = 切换焦点到左侧面板
 keybinding-desc-workspace-shift-focus-right = 切换焦点到右侧面板
 keybinding-desc-workspace-import-to-personal-drive = 导入到个人 Drive
-keybinding-desc-workspace-import-to-team-drive = 导入到团队 Drive
 
 # Drive / 仓库 / AI Rules / MCP
 keybinding-desc-workspace-open-repository = 打开仓库
@@ -1809,8 +1710,6 @@ keybinding-desc-workspace-show-settings-keyboard-shortcuts = 打开设置：键�
 keybinding-desc-workspace-show-settings-keyboard-shortcuts-menu = 配置键盘快捷键...
 keybinding-desc-workspace-show-settings-about = 打开设置：关于
 keybinding-desc-workspace-show-settings-about-menu = 关于 Warp
-keybinding-desc-workspace-show-settings-teams = 打开设置：团队
-keybinding-desc-workspace-show-settings-teams-menu = 打开团队设置
 keybinding-desc-workspace-show-settings-privacy = 打开设置：隐私
 keybinding-desc-workspace-show-settings-warpify = 打开设置：Warpify
 keybinding-desc-workspace-show-settings-warpify-menu = 配置 Warpify...
@@ -1837,15 +1736,13 @@ keybinding-desc-terminal-attach-as-context-menu = 将所选内容作为 Agent �
 keybinding-desc-workspace-init-project = 为 Warp 初始化项目
 keybinding-desc-workspace-add-current-folder = 将当前文件夹添加为项目
 
-# Workspace 调试 / crash / sentry / 堆分析相关 binding
-keybinding-desc-workspace-crash-macos = 触发崩溃（用于测试 sentry-cocoa）
-keybinding-desc-workspace-crash-other = 触发崩溃（用于测试 sentry-native）
+# Workspace 调试 / crash / 堆分析相关 binding
+keybinding-desc-workspace-crash-macos = 触发崩溃（用于测试本地 crash reporting）
+keybinding-desc-workspace-crash-other = 触发崩溃（用于测试本地 crash reporting）
 keybinding-desc-workspace-log-review-comment-send-status = [调试] 记录当前标签页的评审评论发送状态
-keybinding-desc-workspace-panic = 触发 panic（用于测试 sentry-rust）
+keybinding-desc-workspace-panic = 触发 panic（用于测试本地 panic 日志）
 keybinding-desc-workspace-open-view-tree-debugger = 打开视图树调试器
 keybinding-desc-workspace-view-first-time-user-experience = [调试] 查看首次启动引导体验
-keybinding-desc-workspace-open-build-plan-migration-modal = [调试] 打开构建计划迁移弹窗
-keybinding-desc-workspace-reset-build-plan-migration-modal-state = [调试] 重置构建计划迁移弹窗状态
 keybinding-desc-workspace-undismiss-aws-login-banner = [调试] 取消关闭 AWS 登录提示条
 keybinding-desc-workspace-open-oz-launch-modal = [调试] 打开 Oz 启动弹窗
 keybinding-desc-workspace-reset-oz-launch-modal-state = [调试] 重置 Oz 启动弹窗状态
@@ -1888,7 +1785,7 @@ keybinding-desc-terminal-find = 在终端中查找
 keybinding-desc-terminal-select-bookmark-up = 选择上方最近的书签
 keybinding-desc-terminal-select-bookmark-down = 选择下方最近的书签
 keybinding-desc-terminal-open-block-context-menu = 打开命令块上下文菜单
-keybinding-desc-terminal-toggle-team-workflows-modal = 切换团队工作流弹窗
+keybinding-desc-terminal-toggle-workflows-modal = 切换工作流弹窗
 keybinding-desc-terminal-copy-git-branch = 复制 git 分支
 keybinding-desc-terminal-clear-blocks = 清空命令块
 keybinding-desc-terminal-cursor-word-left = 在执行中的命令内向左移动一个单词
@@ -2159,7 +2056,7 @@ rules-init-project-button = 初始化项目
 
 # --- Agent 视图零状态 + 消息栏 ---
 agent-zero-state-title = 新建 Agent 对话
-# OpenWarp 已移除云端 Agent 入口，此 key 实际不会被渲染;保留以匹配 en 兜底链。
+# OpenWarp 已移除远端 Agent 入口，此 key 实际不会被渲染;保留以匹配 en 兜底链。
 agent-zero-state-title-cloud = 新建 Agent 对话
 agent-zero-state-description = 在下方输入提示开始新的对话
 agent-zero-state-description-with-location = 在下方输入提示，于 `{ $location }` 开始新的对话
@@ -2274,7 +2171,7 @@ toggle-suffix-slash-commands-terminal = 终端模式斜杠命令
 toggle-suffix-integrated-gpu = 集成 GPU 渲染（低功耗）
 toggle-suffix-wayland = Wayland 窗口管理
 toggle-suffix-settings-sync = 设置同步
-toggle-suffix-app-analytics = 应用分析
+toggle-suffix-app-analytics = 本地诊断
 toggle-suffix-crash-reporting = 崩溃上报
 toggle-suffix-secret-redaction = 敏感信息脱敏
 toggle-suffix-recording-mode = 录制模式
@@ -2368,7 +2265,6 @@ menu-ai-block-fork-from-query = 从「{ $query }」分叉
 
 # --- tab 右键菜单（tab.rs） ---
 menu-tab-stop-sharing = 停止共享
-menu-tab-share-session = 共享会话
 menu-tab-stop-sharing-all = 停止共享全部
 menu-tab-copy-link = 复制链接
 menu-tab-rename = 重命名标签页
@@ -2386,7 +2282,7 @@ menu-tab-default-no-color = 默认（无颜色）
 
 # --- pane header 溢出菜单（terminal/view/pane_impl.rs） ---
 menu-pane-copy-link = 复制链接
-menu-pane-stop-sharing-session = 停止共享会话
+menu-pane-stop-sharing-session = 停止会话广播
 menu-pane-open-on-desktop = 在桌面端打开
 
 # --- 文件树右键菜单（code/file_tree/view.rs） ---
@@ -2500,11 +2396,6 @@ rewind-dialog-info = 倒回不会影响手动编辑或通过 shell 命令编辑�
 rewind-dialog-cancel = 取消
 rewind-dialog-confirm = 倒回
 
-# 转让所有权确认弹窗（app/src/settings_view/transfer_ownership_confirmation_modal.rs）
-transfer-ownership-dialog-body = 确定要将团队所有权转让给 { $name } 吗？你将不再是所有者，也无法对此团队执行任何管理操作。
-transfer-ownership-dialog-cancel = 取消
-transfer-ownership-dialog-confirm = 转让
-
 # --- ANCHOR-SUB-SEARCH-PALETTES ---
 # 搜索面板（app/src/search/command_palette/view.rs, app/src/search/welcome_palette/view.rs）
 command-palette-search-placeholder = 搜索命令
@@ -2606,8 +2497,6 @@ drive-import-folder-upload-error = 文件夹上传到服务器失败
 
 # Drive 主面板和 workflow 编辑器（app/src/drive/index.rs, app/src/drive/workflows/*）
 drive-title = Drive
-drive-create-team-text = 与团队成员共享命令和知识。
-drive-join-team-header = 与已经在 Warp 上的 { $count } 位团队成员协作。
 drive-environment-variables = 环境变量
 drive-folder = 文件夹
 drive-notebook = 笔记本
@@ -2627,12 +2516,10 @@ drive-empty-trash = 清空废纸篓
 drive-trash-section-title = 废纸篓
 drive-trash-title = 废纸篓
 drive-trash-deletion-warning = 废纸篓中的项目将在 30 天后永久删除。
-drive-team-space-zero-state = 将个人 workflow 或笔记本拖放或移动到此处，即可与团队共享。
-drive-create-team-button = 创建团队
-drive-view-teams-to-join = 查看可加入的团队
-drive-or = 或
-drive-sign-up-storage-limit = 免费注册可提升存储上限并解锁更多功能。
-drive-sign-up = 注册
+drive-team-space-zero-state = 本地版不提供团队空间。请在个人空间管理 workflow 和笔记本。
+drive-sign-up-storage-limit = 本地存储上限会在此设备上生效。
+drive-local-storage-limit-description = 本地存储上限会在此设备上生效。请移除不再需要的项目，为新的 Warp Drive 对象腾出空间。
+drive-sign-up = 本地管理
 drive-copy-link = 复制链接
 drive-collapse-all = 全部折叠
 drive-revert-to-server = 恢复为服务器版本
@@ -2669,8 +2556,8 @@ drive-object-type-ai-fact = AI 事实
 drive-object-type-rules = 规则
 drive-object-type-mcp-server = MCP 服务器
 drive-object-type-mcp-servers = MCP 服务器
-drive-shared-object-limit-hit-banner-prefix = 你当前套餐中的 { $object_type } 数量已用完。
-drive-shared-object-limit-hit-banner = 你当前套餐中的 { $object_type } 数量已用完。升级后可使用更多笔记本、workflow、共享会话和 AI 额度。
+drive-shared-object-limit-hit-banner-prefix = 你已达到本地 { $object_type } 数量上限。
+drive-shared-object-limit-hit-banner = 你已达到本地 { $object_type } 数量上限。
 drive-payment-issue-banner-prefix = 由于订阅付款问题，共享对象已受限。
 drive-payment-issue-banner-admin = 由于订阅付款问题，共享对象已受限。请更新付款信息以恢复访问。
 drive-payment-issue-banner-admin-enterprise = 由于订阅付款问题，共享对象已受限。请联系 support@warp.dev 恢复访问。
@@ -2814,7 +2701,7 @@ workspace-right-panel-code-review = 代码评审
 workspace-right-panel-minimize = 最小化
 workspace-right-panel-maximize = 最大化
 workspace-right-panel-unknown = 未知
-terminal-pane-new-cloud-agent-title = 新建云端智能体
+terminal-pane-new-cloud-agent-title = 新建智能体
 terminal-pane-new-agent-conversation-title = 新建智能体对话
 vertical-tabs-no-tabs-open = 没有打开的标签页
 vertical-tabs-untitled-tab = 未命名标签页
@@ -2875,20 +2762,10 @@ wasm-nux-download-description = Warp 是一款内置 AI 和团队知识的智能
 wasm-nux-learn-more = 了解更多
 wasm-nux-download-confirm = 下载
 wasm-nux-object-kind-drive-objects = Warp Drive 对象
-wasm-nux-object-kind-shared-sessions = 共享会话
 wasm-nux-object-kind-warp-links = Warp 链接
 wasm-nux-always-open-on-web-title = 始终在网页中打开 { $object_kind } 吗？
 wasm-nux-always-open-on-web-detail = 你可以随时在设置中更改此项。
 wasm-nux-yes = 是
-
-# Drive cloud action confirmation dialog (app/src/drive/cloud_action_confirmation_dialog.rs)
-drive-cloud-action-cancel = 取消
-drive-cloud-action-delete-team-title = 你确定要删除这个团队吗？
-drive-cloud-action-leave-team-title = 你确定要离开这个团队吗？
-drive-cloud-action-delete-team-body = 删除这个团队会永久移除该团队及其所有相关内容，包括账单信息或额度。删除后无法恢复。
-drive-cloud-action-leave-team-body = 如需重新加入，你需要再次被邀请。
-drive-cloud-action-delete-team-confirm = 是，删除
-drive-cloud-action-leave-team-confirm = 是，离开
 
 # Auth override warning (app/src/auth/auth_override_warning_body.rs)
 auth-override-warning-title = 检测到新的登录
@@ -2921,9 +2798,9 @@ auth-paste-token-continue = 继续
 auth-offline-first-use-description = 你当前处于离线状态。首次使用 Warp 时需要联网。
 auth-offline-first-use-learn-more = 了解更多
 auth-offline-overlay-title = 离线使用 Warp
-auth-offline-overlay-paragraph-1 = Warp 的所有非云端功能都可以离线使用。
-auth-offline-overlay-paragraph-2 = 但在首次使用 Warp 时，我们要求你保持联网，以启用 Warp 的 AI 和云功能。
-auth-offline-overlay-paragraph-3 = 我们向所有用户提供云功能，因此需要互联网连接来计量 AI 使用量、防止滥用，并将云对象与用户关联起来。如果你选择在退出登录状态下使用 Warp，系统会把一个唯一 ID 绑定到匿名用户账号上，以支持这些功能。
+auth-offline-overlay-paragraph-1 = Warp 的本地功能可以离线使用。
+auth-offline-overlay-paragraph-2 = 首次使用时可能需要联网完成依赖初始化，之后本地智能体和终端功能不依赖 Warp 云服务。
+auth-offline-overlay-paragraph-3 = OpenWarp 会把必要状态保存在本机，用于本地会话、设置和智能体功能。
 auth-offline-overlay-dismiss = 关闭
 auth-privacy-settings-title = 隐私设置
 auth-privacy-settings-done = 完成
@@ -2937,7 +2814,7 @@ auth-logout-show-running-processes = 显示正在运行的进程
 auth-logout-cancel = 取消
 auth-logout-title = 要退出登录吗？
 auth-logout-running-processes-warning = 你有 { $count } 个正在运行的进程。
-auth-logout-shared-sessions-warning = 你有 { $count } 个共享会话。
+auth-logout-shared-sessions-warning = 你有 { $count } 个远端会话。
 auth-logout-unsynced-drive-objects-warning = 你有 { $count } 个未同步的 Warp Drive 对象。退出登录后将失去这些对象。
 auth-logout-unsaved-files-warning = 你有 { $count } 个未保存的文件。退出登录后将失去这些文件。
 
@@ -3010,7 +2887,7 @@ agent-tip-drag-image = 将图片拖入面板，可作为智能体上下文附加
 agent-tip-interactive-tools = 可以让智能体控制 node、python、postgres、gdb 或 vim 等交互式工具。
 agent-tip-code-review-panel = 按 <keybinding> 打开代码审查面板并审查智能体的改动。
 agent-tip-add-mcp = 输入 `/add-mcp` 将 MCP 服务器添加到工作区。
-agent-tip-open-mcp-servers = 输入 `/open-mcp-servers` 查看并与团队共享 MCP 服务器。
+agent-tip-open-mcp-servers = 输入 `/open-mcp-servers` 查看并管理本地 MCP 服务器。
 agent-tip-create-environment = 输入 `/create-environment` 将仓库转换为智能体可运行的远程 docker 环境。
 agent-tip-add-prompt = 输入 `/add-prompt` 创建可复用提示词，用于重复工作流。
 agent-tip-add-rule = 输入 `/add-rule` 创建全局智能体规则。
@@ -3110,7 +2987,7 @@ onboarding-intention-terminal-title = 只使用终端
 onboarding-intention-terminal-badge = 不启用 AI 功能
 onboarding-intention-terminal-description = 现代化终端，专注速度、上下文和控制，不启用 AI。
 onboarding-ai-feature-warp-agents = Warp 智能体
-onboarding-ai-feature-oz-cloud-agents-platform = Oz 云端智能体平台
+onboarding-ai-feature-oz-cloud-agents-platform = Oz 本地智能体平台
 onboarding-ai-feature-next-command-predictions = 下一条命令预测
 onboarding-ai-feature-prompt-suggestions = 提示词建议
 onboarding-ai-feature-remote-control-agents = 通过 Claude Code、Codex 等智能体进行远程控制
@@ -3119,8 +2996,8 @@ onboarding-agent-title = 自定义你的 Warp 智能体
 onboarding-agent-subtitle = 选择应用内智能体的默认设置。
 onboarding-agent-default-model = 默认模型
 onboarding-agent-autonomy = 自主程度
-onboarding-agent-set-by-team-workspace = 由团队工作区设置
-onboarding-agent-team-workspace-autonomy-description = 自主程度设置由你的团队工作区统一配置。
+onboarding-agent-set-by-team-workspace = 由本地工作区策略管理
+onboarding-agent-team-workspace-autonomy-description = 自主程度设置由本地工作区策略配置。
 onboarding-agent-autonomy-full-title = 完全
 onboarding-agent-autonomy-full-subtitle = 无需询问即可运行命令、编写代码和读取文件。
 onboarding-agent-autonomy-partial-title = 部分
@@ -3162,26 +3039,27 @@ onboarding-customize-tools-panel = 工具面板
 onboarding-customize-code-review = 代码评审
 onboarding-free-user-title = 开始使用吧。
 onboarding-free-user-agent-title = 使用 Warp 内置智能体进行开发
-onboarding-free-user-agent-description = 使用 Oz（Warp 内置智能体）迭代、规划和构建。可在本地或云端运行。
+onboarding-free-user-agent-description = 使用 Oz（Warp 内置智能体）迭代、规划和构建。本地运行，不依赖 Warp 云服务。
 onboarding-free-user-terminal-title = 搭配第三方智能体的经典终端
 onboarding-free-user-terminal-description = 现代终端，支持第三方智能体（Claude Code、Codex、Gemini CLI）和经典终端工作流。
 onboarding-free-user-subscribe-title = 订阅后即可使用 Warp 的智能体开发能力。
 onboarding-free-user-subscribe-item-credits = 每月 1,500 点额度
 onboarding-free-user-subscribe-item-models = 使用 OpenAI、Anthropic 和 Google 的前沿模型
 onboarding-free-user-subscribe-item-reload = 使用 Reload 额度和按量折扣
-onboarding-free-user-subscribe-item-cloud-agents = 更长的云端智能体访问权限
+onboarding-free-user-subscribe-item-cloud-agents = 更长的智能体访问权限
 onboarding-free-user-subscribe-item-indexing = 最高代码库索引额度
 onboarding-free-user-subscribe-item-drive = 不限量 Warp Drive 对象和协作
 onboarding-free-user-subscribe-item-support = 私人邮件支持
-onboarding-free-user-subscribe-item-cloud-storage = 不限量云端对话存储
+onboarding-free-user-subscribe-item-cloud-storage = 本地对话存储
 
-auth-opt-out-line-1 = 如果你想停用分析和 AI 功能，
-auth-opt-out-line-2-prefix = 可以调整你的
-auth-privacy-settings-prefix = 如果你想停用分析，可以调整你的{" "}
-auth-privacy-settings-ai-prefix = 如果你想停用分析和 AI 功能，可以调整你的{" "}
+auth-opt-out-line-1 = OpenWarp 会把引导选择保存在本机。
+auth-opt-out-line-2-prefix = 你可以调整你的
+auth-privacy-settings-prefix = 你可以调整你的{" "}
+auth-privacy-settings-ai-prefix = 你可以在这里调整本地 AI 偏好：{" "}
 auth-privacy-settings = 隐私设置
-auth-terms-prefix = 继续即表示你同意 Warp 的{" "}
-auth-terms-of-service = 服务条款
+auth-local-privacy-note = OpenWarp 会把引导选择保存在本设备。
+auth-terms-prefix = 继续后，此设置仍保留在本机。{" "}
+auth-terms-of-service = 本地设置
 auth-log-in = 登录
 auth-paste-token-from-browser = 点击这里粘贴浏览器中的 token
 auth-login-slide-title-warp-drive = 开始使用 Warp Drive
@@ -3200,7 +3078,7 @@ auth-disable-ai-features-confirm-title = 确定要停用 AI 功能吗？
 auth-disable-warp-drive-confirm-body = Warp Drive 可让你跨设备保存工作流和知识，并与团队分享。继续后，你将无法使用以下功能：
 auth-disable-ai-features-confirm-body = 开启 AI 后 Warp 会更强大。继续后，你将无法使用以下功能：
 auth-feature-session-sharing = 会话分享
-auth-sign-up = 注册
+auth-sign-up = 继续本地使用
 auth-sign-in = 登录
 auth-already-have-account = 已有账号？{" "}
 auth-dont-want-sign-in-now = 现在不想登录？{" "}
@@ -3209,11 +3087,11 @@ auth-skip-login-confirm-title = 确定要跳过登录吗？
 auth-skip-login-confirm-line-1 = 你可以稍后注册，但部分功能（例如 AI）
 auth-skip-login-confirm-line-2-prefix = 仅登录用户可用。{" "}
 auth-yes-skip-login = 是，跳过登录
-auth-require-login-ai-collaboration = 要使用 Warp 的 AI 功能或与他人协作，请创建账号。
-auth-require-login-drive-limit = 要在 Warp Drive 中创建更多对象，请创建账号。
-auth-require-login-share = 要分享内容，请创建账号。
+auth-require-login-ai-collaboration = 本地 AI 功能不需要 Warp 账户。
+auth-require-login-drive-limit = OpenWarp 会将 Warp Drive 对象保存在本机。
+auth-require-login-share = 本地 OpenWarp 构建不提供分享功能。
 auth-welcome-title = 欢迎使用 Warp！
-auth-sign-up-for-warp = 注册 Warp
+auth-sign-up-for-warp = 继续使用 OpenWarp
 auth-browser-sign-in-title = 在浏览器中登录\n以继续
 auth-browser-not-launched-prefix = 如果浏览器没有打开，{" "}
 auth-copy-url = 复制 URL
@@ -3494,7 +3372,7 @@ notifications-banner-set-permissions = 设置权限
 ai-edit-api-keys = 编辑 API Key
 ai-manage-privacy-settings = 管理隐私设置
 ai-block-manage-agent-permissions = 管理智能体权限
-agent-zero-state-cloud-agents-description = 使用云端智能体并行运行多个智能体，构建可自主运行的智能体，并可随时随地查看智能体状态。
+agent-zero-state-cloud-agents-description = 使用本地智能体并行运行多个智能体，构建可自主运行的智能体，并在本机查看智能体状态。
 agent-zero-state-visit-docs = 查看文档
 ai-execution-profile-agent-decides = 由智能体决定
 ai-execution-profile-always-ask = 始终询问
@@ -3531,7 +3409,7 @@ notebook-apply-link = 应用链接
 notebook-sync-conflict-resolution-message = 此 Notebook 无法保存，因为你编辑时内容已被其他更改更新。请复制你的内容并刷新。
 notebook-sync-feature-not-available-message = 此 Notebook 无法保存到服务器，因为该功能暂时不可用。更改已保存在本地，请稍后重试。
 notebook-link-copied-toast = 链接已复制
-settings-share-with-team = 与团队共享
+settings-share-with-team = 本地保存
 tooltip-secrets-not-sent-to-warp-server = *密钥不会发送到 Warp 服务器。
 editor-voice-limit-hit-toast = 你已达到语音请求额度上限。额度将在下个周期刷新。
 editor-voice-error-toast = 处理语音输入时出错。
