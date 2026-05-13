@@ -13,9 +13,7 @@ use crate::ai::llms::{LLMContextWindow, LLMId, LLMPreferences, LLMPreferencesEve
 use crate::ai::mcp::TemplatableMCPServerManager;
 use crate::ai::paths::host_native_absolute_path;
 use crate::auth::AuthStateProvider;
-use crate::auth::AuthViewVariant;
-use crate::auth::{AuthManager, LoginGatedFeature};
-use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
+use crate::cloud_object::model::persistence::{ObjectStoreEvent, ObjectStoreModel};
 use crate::cloud_object::GenericStringObjectFormat::Json;
 use crate::cloud_object::JsonObjectType;
 use crate::cloud_object::ObjectType;
@@ -29,7 +27,7 @@ use crate::settings::{
     AwsBedrockCredentialsEnabled, FileBasedMcpEnabled, GitOperationsAutogenEnabled,
     IncludeAgentCommandsInHistory, IntelligentAutosuggestionsEnabled, MemoryEnabled,
     NLDInTerminalEnabled, NaturalLanguageAutosuggestionsEnabled, OrchestrationEnabled,
-    RuleSuggestionsEnabled, SharedBlockTitleGenerationEnabled, ShouldRenderCLIAgentToolbar,
+    RuleSuggestionsEnabled, ShouldRenderCLIAgentToolbar,
     ShouldRenderUseAgentToolbarForUserCommands, ShowAgentTips, ShowConversationHistory,
     ShowHintText, ThinkingDisplayMode, VoiceInputEnabled,
 };
@@ -46,7 +44,6 @@ use itertools::Itertools;
 use regex::Regex;
 use settings::{Setting, ToggleableSetting};
 use strum::IntoEnumIterator;
-use warp_core::channel::ChannelState;
 use warp_core::context_flag::ContextFlag;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::color::internal_colors;
@@ -65,7 +62,7 @@ use warpui::{
     ui_components::{
         button::ButtonVariant,
         components::{Coords, UiComponent, UiComponentStyles},
-        switch::{SwitchStateHandle, TooltipConfig},
+        switch::SwitchStateHandle,
     },
     Action, AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext,
     ViewHandle,
@@ -124,7 +121,6 @@ use crate::server::telemetry::{
 };
 use crate::ui_components::icons::Icon;
 use crate::view_components::dropdown::DropdownAction;
-use crate::workspaces::workspace::CustomerType;
 use crate::{
     appearance::Appearance,
     editor::Event as EditorEvent,
@@ -301,19 +297,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         )
         .with_group(bindings::BindingGroup::WarpAi)
         .with_enabled(|| FeatureFlag::PredictAMQueries.is_enabled())],
-        app,
-    );
-    ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
-        vec![ToggleSettingActionPair::new(
-            &crate::t!("toggle-suffix-shared-block-title-gen"),
-            builder(SettingsAction::AI(
-                AISettingsPageAction::ToggleSharedTitleGeneration,
-            )),
-            &(context.clone() & id!(flags::IS_ACTIVE_AI_ENABLED)),
-            flags::SHARED_BLOCK_TITLE_GENERATION_FLAG,
-        )
-        .with_group(bindings::BindingGroup::WarpAi)
-        .with_enabled(|| FeatureFlag::SharedBlockTitleGeneration.is_enabled())],
         app,
     );
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
@@ -751,11 +734,11 @@ impl AISettingsPageView {
             },
         );
 
-        let cloud_model = CloudModel::handle(ctx);
+        let cloud_model = ObjectStoreModel::handle(ctx);
         ctx.subscribe_to_model(&cloud_model, |me, _, event, ctx| {
             let added_or_deleted_mcp_servers = matches!(
                 event,
-                CloudModelEvent::ObjectCreated { type_and_id } | CloudModelEvent::ObjectDeleted { type_and_id, .. }
+                ObjectStoreEvent::ObjectCreated { type_and_id } | ObjectStoreEvent::ObjectDeleted { type_and_id, .. }
                 if matches!(
                     type_and_id.object_type(),
                     ObjectType::GenericStringObject(Json(JsonObjectType::MCPServer))
@@ -1439,8 +1422,7 @@ impl AISettingsPageView {
 
     fn build_page(subpage: Option<AISubpage>, ctx: &mut ViewContext<Self>) -> PageType<Self> {
         let ai_settings = AISettings::as_ref(ctx);
-        let should_show_usage_widget = !FeatureFlag::UsageBasedPricing.is_enabled()
-            && !UserWorkspaces::as_ref(ctx).is_byo_api_key_enabled();
+        let should_show_usage_widget = !UserWorkspaces::as_ref(ctx).is_byo_api_key_enabled();
 
         let mut widgets: Vec<Box<dyn SettingsWidget<View = AISettingsPageView>>> = Vec::new();
 
@@ -1462,10 +1444,6 @@ impl AISettingsPageView {
                     || (FeatureFlag::PredictAMQueries.is_enabled()
                         && ai_settings
                             .natural_language_autosuggestions_enabled_internal
-                            .is_supported_on_current_platform())
-                    || (FeatureFlag::SharedBlockTitleGeneration.is_enabled()
-                        && ai_settings
-                            .shared_block_title_generation_enabled_internal
                             .is_supported_on_current_platform())
                     || (FeatureFlag::GitOperationsInCodeReview.is_enabled()
                         && ai_settings
@@ -1493,8 +1471,8 @@ impl AISettingsPageView {
                 widgets.push(Box::new(AwsBedrockWidget::new(ctx)));
                 widgets.push(Box::new(AgentProvidersWidget::new(ctx)));
                 widgets.push(Box::new(OtherAIWidget::default()));
-                if FeatureFlag::AgentModeComputerUse.is_enabled() {
-                    widgets.push(Box::new(CloudAgentComputerUseWidget::default()));
+                if FeatureFlag::Orchestration.is_enabled() {
+                    widgets.push(Box::new(OrchestrationWidget::default()));
                 }
             }
             Some(AISubpage::WarpAgent) => {
@@ -1509,10 +1487,6 @@ impl AISettingsPageView {
                     || (FeatureFlag::PredictAMQueries.is_enabled()
                         && ai_settings
                             .natural_language_autosuggestions_enabled_internal
-                            .is_supported_on_current_platform())
-                    || (FeatureFlag::SharedBlockTitleGeneration.is_enabled()
-                        && ai_settings
-                            .shared_block_title_generation_enabled_internal
                             .is_supported_on_current_platform())
                     || (FeatureFlag::GitOperationsInCodeReview.is_enabled()
                         && ai_settings
@@ -1531,8 +1505,8 @@ impl AISettingsPageView {
                 }
                 widgets.push(Box::new(AwsBedrockWidget::new(ctx)));
                 widgets.push(Box::new(OtherAIWidget::default()));
-                if FeatureFlag::AgentModeComputerUse.is_enabled() {
-                    widgets.push(Box::new(CloudAgentComputerUseWidget::default()));
+                if FeatureFlag::Orchestration.is_enabled() {
+                    widgets.push(Box::new(OrchestrationWidget::default()));
                 }
             }
             Some(AISubpage::Providers) => {
@@ -2001,7 +1975,8 @@ impl AISettingsPageView {
     fn get_non_allowlisted_or_denylisted_mcp_servers(
         ctx: &mut ViewContext<Self>,
     ) -> Vec<(uuid::Uuid, String)> {
-        let all_mcp_servers = TemplatableMCPServerManager::get_all_cloud_synced_mcp_servers(ctx);
+        let all_mcp_servers =
+            TemplatableMCPServerManager::get_all_templatable_mcp_server_names(ctx);
         let already_allowlisted_mcp_servers =
             BlocklistAIPermissions::as_ref(ctx).get_mcp_allowlist(ctx, None);
         let already_denylisted_mcp_servers =
@@ -2193,7 +2168,6 @@ pub enum AISettingsPageAction {
     TogglePromptSuggestions,
     ToggleCodeSuggestions,
     ToggleNaturalLanguageAutosuggestions,
-    ToggleSharedTitleGeneration,
     ToggleGitOperationsAutogen,
     ToggleAIInputAutoDetection,
     ToggleNLDInTerminal,
@@ -2205,7 +2179,6 @@ pub enum AISettingsPageAction {
     ToggleShowInputHintText,
     ToggleShowAgentTips,
     SetThinkingDisplayMode(ThinkingDisplayMode),
-    AttemptLoginGatedUpgrade,
     RemoveCLIAgentToolbarEnabledCommand(String),
     RemoveFromCommandExecutionAllowlist(AgentModeCommandExecutionPredicate),
     RemoveFromCommandExecutionDenylist(AgentModeCommandExecutionPredicate),
@@ -2244,7 +2217,6 @@ pub enum AISettingsPageAction {
     ToggleAwsBedrockAutoLogin,
     ToggleAwsBedrockCredentialsEnabled,
     RefreshAwsBedrockCredentials,
-    ToggleCloudAgentComputerUse,
     ToggleFileBasedMcp,
     ToggleIncludeAgentCommandsInHistory,
     #[cfg(feature = "local_fs")]
@@ -2394,16 +2366,6 @@ pub enum ModelCapabilityKind {
     Audio,
 }
 
-impl From<&AISettingsPageAction> for LoginGatedFeature {
-    fn from(val: &AISettingsPageAction) -> LoginGatedFeature {
-        use AISettingsPageAction::*;
-        match val {
-            AttemptLoginGatedUpgrade => "Upgrade AI Usage",
-            _ => "Unknown reason",
-        }
-    }
-}
-
 impl TypedActionView for AISettingsPageView {
     type Action = AISettingsPageAction;
 
@@ -2540,28 +2502,6 @@ impl TypedActionView for AISettingsPageView {
                     Err(e) => {
                         log::warn!(
                             "Failed to set value for Natural Language Autosuggestions setting: {e:?}"
-                        );
-                    }
-                }
-                ctx.notify();
-            }
-            AISettingsPageAction::ToggleSharedTitleGeneration => {
-                match AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    settings
-                        .shared_block_title_generation_enabled_internal
-                        .toggle_and_save_value(ctx)
-                }) {
-                    Ok(_new_value) => {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::ToggleSharedBlockTitleGenerationSetting {
-                                is_shared_block_title_generation_enabled: true,
-                            },
-                            ctx
-                        );
-                    }
-                    Err(e) => {
-                        log::warn!(
-                            "Failed to set value for Shared Block Title Generation setting: {e:?}"
                         );
                     }
                 }
@@ -2753,15 +2693,6 @@ impl TypedActionView for AISettingsPageView {
                     report_if_error!(settings.thinking_display_mode.set_value(*mode, ctx));
                 });
                 ctx.notify();
-            }
-            AISettingsPageAction::AttemptLoginGatedUpgrade => {
-                AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-                    auth_manager.attempt_login_gated_feature(
-                        action.into(),
-                        AuthViewVariant::RequireLoginCloseable,
-                        ctx,
-                    )
-                });
             }
             AISettingsPageAction::RemoveCLIAgentToolbarEnabledCommand(command) => {
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
@@ -3044,14 +2975,6 @@ impl TypedActionView for AISettingsPageView {
                 #[cfg(not(target_family = "wasm"))]
                 ApiKeyManager::handle(ctx).update(ctx, |manager, ctx| {
                     drop(refresh_aws_credentials(manager, ctx));
-                });
-                ctx.notify();
-            }
-            AISettingsPageAction::ToggleCloudAgentComputerUse => {
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    report_if_error!(settings
-                        .cloud_agent_computer_use_enabled
-                        .toggle_and_save_value(ctx));
                 });
                 ctx.notify();
             }
@@ -4211,72 +4134,11 @@ impl SettingsWidget for UsageWidget {
             appearance,
         );
 
-        let auth_state = AuthStateProvider::as_ref(app).get();
-        let upgrade_cta_text_fragments = if let Some(team) =
-            UserWorkspaces::as_ref(app).current_team()
-        {
-            let current_user_email = auth_state.user_email().unwrap_or_default();
-            let has_admin_permissions = team.has_admin_permissions(&current_user_email);
-            if team.billing_metadata.can_upgrade_to_higher_tier_plan() {
-                let upgrade_url = UserWorkspaces::upgrade_link_for_team(team.uid);
-                if has_admin_permissions {
-                    vec![
-                        FormattedTextFragment::hyperlink("Upgrade", upgrade_url),
-                        FormattedTextFragment::plain_text(" to get more AI usage."),
-                    ]
-                } else {
-                    // The /upgrade page says to contact their administrator.
-                    vec![
-                        FormattedTextFragment::hyperlink("Compare plans", upgrade_url),
-                        FormattedTextFragment::plain_text(" for more AI usage."),
-                    ]
-                }
-            } else {
-                vec![
-                    FormattedTextFragment::hyperlink("Contact support", "mailto:support@warp.dev"),
-                    FormattedTextFragment::plain_text(" for more AI usage."),
-                ]
-            }
-        } else {
-            let user_id = auth_state.user_id().unwrap_or_default();
-            let upgrade_url = UserWorkspaces::upgrade_link(user_id);
-            vec![
-                FormattedTextFragment::hyperlink("Upgrade", upgrade_url),
-                FormattedTextFragment::plain_text(" to get more AI usage."),
-            ]
-        };
-
-        let mut upgrade_cta = FormattedTextElement::new(
-            FormattedText::new([FormattedTextLine::Line(upgrade_cta_text_fragments)]),
-            appearance.ui_font_size(),
-            appearance.ui_font_family(),
-            appearance.ui_font_family(),
-            blended_colors::text_sub(appearance.theme(), appearance.theme().surface_1()),
-            self.requests_highlight_index.clone(),
-        )
-        .with_hyperlink_font_color(appearance.theme().accent().into_solid());
-
-        if AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out()
-        {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|_, ctx, _| {
-                ctx.dispatch_typed_action(AISettingsPageAction::AttemptLoginGatedUpgrade);
-            });
-        } else {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|url, ctx, _| {
-                ctx.dispatch_typed_action(AISettingsPageAction::HyperlinkClick(url));
-            })
-        }
-
         Flex::column()
             .with_children([
                 render_separator(appearance),
                 usage_header,
                 request_usage_row,
-                Container::new(upgrade_cta.finish())
-                    .with_margin_bottom(16.)
-                    .finish(),
             ])
             .finish()
     }
@@ -4289,7 +4151,6 @@ struct ActiveAIWidget {
     prompt_suggestions_toggle: SwitchStateHandle,
     code_suggestions_toggle: SwitchStateHandle,
     natural_language_autosuggestions_toggle: SwitchStateHandle,
-    shared_block_title_generation_toggle: SwitchStateHandle,
     git_operations_autogen_toggle: SwitchStateHandle,
 }
 
@@ -4321,22 +4182,6 @@ impl ActiveAIWidget {
             && AISettings::as_ref(app)
                 .natural_language_autosuggestions_enabled_internal
                 .is_supported_on_current_platform()
-    }
-
-    // TODO: Check if the user's enterprise billing policy allows toggling this feature.
-    fn is_shared_block_title_generation_toggleable(&self, app: &AppContext) -> bool {
-        FeatureFlag::SharedBlockTitleGeneration.is_enabled()
-            && AISettings::as_ref(app)
-                .shared_block_title_generation_enabled_internal
-                .is_supported_on_current_platform()
-            && (!UserWorkspaces::as_ref(app)
-                .current_team()
-                .is_some_and(|team| {
-                    team.billing_metadata.customer_type == CustomerType::Enterprise
-                })
-                // Override the enterprise check for dogfood builds, as our dogfood team
-                // is an enterprise team.
-                || ChannelState::channel().is_dogfood())
     }
 
     fn is_git_operations_autogen_toggleable(&self, app: &AppContext) -> bool {
@@ -4456,33 +4301,6 @@ impl ActiveAIWidget {
             .finish()
     }
 
-    fn render_shared_block_title_generation_section(
-        &self,
-        view: &AISettingsPageView,
-        app: &warpui::AppContext,
-    ) -> Box<dyn warpui::Element> {
-        let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
-        Flex::column()
-            .with_child(
-                render_ai_setting_toggle::<SharedBlockTitleGenerationEnabled>(
-                    crate::t!("settings-ai-shared-block-title-generation-label"),
-                    AISettingsPageAction::ToggleSharedTitleGeneration,
-                    *ai_settings.shared_block_title_generation_enabled_internal,
-                    is_toggleable,
-                    self.shared_block_title_generation_toggle.clone(),
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-            )
-            .with_child(render_ai_setting_description(
-                crate::t!("settings-ai-shared-block-title-generation-description"),
-                is_toggleable,
-                app,
-            ))
-            .finish()
-    }
-
     fn render_git_operations_autogen_section(
         &self,
         view: &AISettingsPageView,
@@ -4521,7 +4339,6 @@ impl SettingsWidget for ActiveAIWidget {
             || self.is_prompt_suggestions_toggleable(app)
             || self.is_suggested_code_banners_toggleable(app)
             || self.is_natural_language_autosuggestions_toggleable(app)
-            || self.is_shared_block_title_generation_toggleable(app)
             || self.is_git_operations_autogen_toggleable(app)
     }
 
@@ -4579,10 +4396,6 @@ impl SettingsWidget for ActiveAIWidget {
 
         if self.is_natural_language_autosuggestions_toggleable(app) {
             column.add_child(self.render_natural_language_autosuggestions_section(view, app));
-        }
-
-        if self.is_shared_block_title_generation_toggleable(app) {
-            column.add_child(self.render_shared_block_title_generation_section(view, app));
         }
 
         if self.is_git_operations_autogen_toggleable(app) {
@@ -5262,7 +5075,7 @@ impl AgentsWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let all_runnable_mcp_servers =
-            TemplatableMCPServerManager::get_all_cloud_synced_mcp_servers(app);
+            TemplatableMCPServerManager::get_all_templatable_mcp_server_names(app);
         if all_runnable_mcp_servers.is_empty() {
             self.render_mcp_permissions_zero_state(ai_settings, appearance, app)
         } else {
@@ -6535,16 +6348,15 @@ impl SettingsWidget for CLIAgentWidget {
 }
 
 #[derive(Default)]
-struct CloudAgentComputerUseWidget {
-    toggle: SwitchStateHandle,
+struct OrchestrationWidget {
     orchestration_toggle: SwitchStateHandle,
 }
 
-impl SettingsWidget for CloudAgentComputerUseWidget {
+impl SettingsWidget for OrchestrationWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz cloud agent computer use orchestration multi-agent"
+        "oz orchestration multi-agent"
     }
 
     fn render(
@@ -6553,65 +6365,8 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        use crate::ai::execution_profiles::{CloudAgentComputerUseState, ComputerUsePermission};
-
         let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
-
-        // Determine toggle state based on workspace autonomy setting and user preference
-        let CloudAgentComputerUseState {
-            enabled: is_checked,
-            is_forced_by_org,
-        } = ComputerUsePermission::resolve_cloud_agent_state(app);
-
-        // Toggle is disabled if forced by org settings OR if AI is globally disabled
-        let is_disabled = is_forced_by_org || !is_any_ai_enabled;
-
-        let ui_builder = appearance.ui_builder();
-        let toggle = if is_forced_by_org {
-            // Disabled by organization setting - show tooltip on hover
-            ui_builder
-                .switch(self.toggle.clone())
-                .check(is_checked)
-                .with_tooltip(TooltipConfig {
-                    text: crate::t!("settings-ai-org-enforced-tooltip"),
-                    styles: ui_builder.default_tool_tip_styles(),
-                })
-                .disable()
-                .build()
-                .finish()
-        } else if !is_any_ai_enabled {
-            // Disabled because AI is off globally - no tooltip needed
-            ui_builder
-                .switch(self.toggle.clone())
-                .check(is_checked)
-                .with_disabled(true)
-                .build()
-                .finish()
-        } else {
-            // Enabled - allow toggling
-            ui_builder
-                .switch(self.toggle.clone())
-                .check(is_checked)
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(AISettingsPageAction::ToggleCloudAgentComputerUse);
-                })
-                .finish()
-        };
-
-        let toggle_row = build_toggle_element(
-            render_body_item_label::<AISettingsPageAction>(
-                crate::t!("settings-ai-cloud-agent-computer-use"),
-                Some(styles::header_font_color(!is_disabled, app)),
-                None,
-                LocalOnlyIconState::Hidden,
-                ToggleState::Enabled,
-                appearance,
-            ),
-            toggle,
-            appearance,
-            None,
-        );
+        let ai_settings = AISettings::as_ref(app);
 
         let mut column = Flex::column()
             .with_child(render_separator(appearance))
@@ -6623,31 +6378,22 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
-            )
-            .with_child(toggle_row)
-            .with_child(render_ai_setting_description(
-                crate::t!("settings-ai-cloud-agent-computer-use-description"),
-                !is_disabled,
-                app,
-            ));
+            );
 
-        if FeatureFlag::Orchestration.is_enabled() {
-            let ai_settings = AISettings::as_ref(app);
-            column.add_child(render_ai_setting_toggle::<OrchestrationEnabled>(
-                crate::t!("settings-ai-orchestration-label"),
-                AISettingsPageAction::ToggleOrchestration,
-                *ai_settings.orchestration_enabled,
-                is_any_ai_enabled,
-                self.orchestration_toggle.clone(),
-                &view.local_only_icon_tooltip_states,
-                app,
-            ));
-            column.add_child(render_ai_setting_description(
-                crate::t!("settings-ai-orchestration-description"),
-                is_any_ai_enabled,
-                app,
-            ));
-        }
+        column.add_child(render_ai_setting_toggle::<OrchestrationEnabled>(
+            crate::t!("settings-ai-orchestration-label"),
+            AISettingsPageAction::ToggleOrchestration,
+            *ai_settings.orchestration_enabled,
+            is_any_ai_enabled,
+            self.orchestration_toggle.clone(),
+            &view.local_only_icon_tooltip_states,
+            app,
+        ));
+        column.add_child(render_ai_setting_description(
+            crate::t!("settings-ai-orchestration-description"),
+            is_any_ai_enabled,
+            app,
+        ));
 
         column.finish()
     }

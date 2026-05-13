@@ -1,17 +1,13 @@
 //! Stream-based API for spawning and monitoring ambient agents.
 #![cfg_attr(target_family = "wasm", expect(dead_code))]
 
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 
 use futures::Stream;
-use session_sharing_protocol::common::SessionId;
 
 use super::AmbientAgentTaskId;
 use super::{AmbientAgentTask, AmbientAgentTaskState};
-use crate::{
-    server::server_api::ai::{SpawnAgentRequest, TaskStatusMessage},
-    terminal::shared_session,
-};
+use crate::ai::ambient_agents::{SpawnAgentRequest, TaskStatusMessage};
 
 /// How long to poll for the agent to be ready.
 /// This should be long enough that the shared session will be joinable.
@@ -20,7 +16,6 @@ pub const TASK_STATUS_POLLING_DURATION: Duration = Duration::from_secs(80);
 /// Information about a session join link for an ambient agent task.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionJoinInfo {
-    pub session_id: Option<SessionId>,
     pub session_link: String,
 }
 
@@ -29,24 +24,9 @@ impl SessionJoinInfo {
         // Prefer the server-provided session_link when available; it is a better signal
         // that a session-sharing link is ready to be shown to the user.
         if let Some(link) = task.session_link.as_ref().filter(|l| !l.is_empty()) {
-            let session_id = task
-                .session_id
-                .as_deref()
-                .and_then(|s| SessionId::from_str(s).ok());
             return Some(Self {
-                session_id,
                 session_link: link.to_string(),
             });
-        }
-
-        // Fallback to constructing a link from the session_id.
-        if let Some(session_id_str) = task.session_id.as_deref() {
-            if let Ok(session_id) = SessionId::from_str(session_id_str) {
-                return Some(Self {
-                    session_id: Some(session_id),
-                    session_link: shared_session::join_link(&session_id),
-                });
-            }
         }
 
         None
@@ -70,7 +50,7 @@ pub enum AmbientAgentEvent {
     SessionStarted { session_join_info: SessionJoinInfo },
     /// Timed out waiting for the agent session to be ready.
     TimedOut,
-    /// Cloud agent capacity limit has been reached. This does not block
+    /// Agent capacity limit has been reached. This does not block
     /// the task from eventually starting.
     AtCapacity,
 }
@@ -89,6 +69,6 @@ pub fn spawn_task(
     _timeout: Option<Duration>,
 ) -> impl Stream<Item = Result<AmbientAgentEvent, anyhow::Error>> {
     async_stream::stream! {
-        yield Err(anyhow::anyhow!("Cloud agent spawning is disabled in OpenWarp"));
+        yield Err(anyhow::anyhow!("Agent spawning is disabled in OpenWarp"));
     }
 }

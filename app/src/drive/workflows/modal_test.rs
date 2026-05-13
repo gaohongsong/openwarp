@@ -4,9 +4,8 @@ use warpui::{platform::WindowStyle, App, ViewHandle};
 use super::WorkflowModal;
 use crate::auth::AuthStateProvider;
 use crate::{
-    cloud_object::model::persistence::CloudModel,
+    cloud_object::model::persistence::ObjectStoreModel,
     editor::PlainTextEditorViewAction as EditorAction,
-    server::server_api::ServerApiProvider,
     settings_view::keybindings::KeybindingChangedNotifier,
     test_util::settings::initialize_settings_for_tests,
     workflows::workflow::{Argument, Workflow},
@@ -17,8 +16,7 @@ fn initialize_app(app: &mut App) {
     initialize_settings_for_tests(app);
 
     app.add_singleton_model(|_| Appearance::mock());
-    app.add_singleton_model(CloudModel::mock);
-    app.add_singleton_model(|_| ServerApiProvider::new_for_test());
+    app.add_singleton_model(ObjectStoreModel::mock);
     app.add_singleton_model(|_| KeybindingChangedNotifier::mock());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
 

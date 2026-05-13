@@ -8,15 +8,12 @@ mod bookmarks;
 pub mod init;
 pub mod inline_banner;
 pub mod load_ai_conversation;
-use ai::agent::action::InsertReviewComment;
-pub use load_ai_conversation::ConversationRestorationInNewPaneType;
-// TODO(advait): if we align on prompt suggestions banner in Input, move code out of inline_banner mod.
-pub(crate) mod init_environment;
 use crate::ai::block_context::BlockContext;
 #[cfg(feature = "local_fs")]
 use crate::ai::skills::SkillOpenOrigin;
 use crate::global_resource_handles::GlobalResourceHandlesProvider;
-use crate::terminal::view::ambient_agent::is_cloud_agent_pre_first_exchange;
+use ai::agent::action::InsertReviewComment;
+pub use load_ai_conversation::ConversationRestorationInNewPaneType;
 
 use onboarding::callout::{FinalState, OnboardingCalloutViewEvent, OnboardingQuery};
 use onboarding::{OnboardingCalloutView, OnboardingKeybindings};
@@ -51,7 +48,6 @@ use crate::ai::blocklist::agent_view::{
     AgentViewEntryBlockParams, AgentViewEntryOrigin, AgentViewHeaderDisabledTheme,
     AgentViewHeaderTheme, AgentViewZeroStateBlock, AgentViewZeroStateEvent, EphemeralMessageModel,
     ExitAgentViewError, ExitConfirmationTrigger, InlineAgentViewHeader,
-    ENTER_OR_EXIT_CONFIRMATION_WINDOW,
 };
 use crate::ai::conversation_utils;
 use crate::ai::predict::prompt_suggestions::{
@@ -75,7 +71,6 @@ use super::cli_agent;
 use super::CLIAgent;
 #[cfg(feature = "local_fs")]
 use crate::ai::agent::{CurrentHead, DiffBase};
-use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::{
     conversation_output_status_from_conversation, AmbientAgentTaskId, AmbientConversationStatus,
 };
@@ -139,12 +134,6 @@ use crate::terminal::cli_agent_sessions::{
     CLIAgentSessionContext, CLIAgentSessionStatus, CLIAgentSessionsModel,
     CLIAgentSessionsModelEvent,
 };
-use crate::terminal::view::init_environment::{
-    mode_selector::{
-        EnvironmentSetupMode, EnvironmentSetupModeSelector, EnvironmentSetupModeSelectorEvent,
-    },
-    InitEnvironmentBlock, InitEnvironmentBlockEvent,
-};
 use crate::terminal::view::ssh_remote_server_choice_view::{
     SshRemoteServerChoiceView, SshRemoteServerChoiceViewEvent,
 };
@@ -162,6 +151,7 @@ use crate::settings::CodeSettings;
 pub use action::{AgentOnboardingVersion, OnboardingIntention, OnboardingVersion, TerminalAction};
 use ai::api_keys::{ApiKeyManager, AwsCredentialsState};
 
+use crate::terminal::shared_session::protocol::{SessionEndedReason, SessionSourceType};
 pub use block_banner::{WithinBlockBanner, BLOCK_BANNER_HEIGHT};
 use block_onboarding::onboarding_agentic_suggestions_block::{
     OnboardingAgenticSuggestionsBlock, OnboardingAgenticSuggestionsBlockEvent, OnboardingChipType,
@@ -173,8 +163,6 @@ pub use init::{
 pub use inline_banner::{NotificationsDiscoveryBannerAction, NotificationsErrorBannerAction};
 #[cfg(feature = "local_fs")]
 use repo_metadata::repositories::{DetectedRepositories, RepoDetectionSource};
-use session_sharing_protocol::common::LongRunningCommandAgentInteractionState;
-use session_sharing_protocol::sharer::{RoleUpdateReason, SessionEndedReason, SessionSourceType};
 use ssh_file_upload::{FileUpload, FileUploadEvent};
 use uuid::Uuid;
 use warp_core::channel::ChannelState;
@@ -219,26 +207,26 @@ use crate::ai::{
 };
 use crate::auth::AuthManager;
 use crate::auth::AuthState;
+use crate::auth::AuthStateProvider;
 use crate::auth::AuthViewVariant;
-use crate::auth::{AuthStateProvider, UserUid};
 use crate::autoupdate::{self, get_update_state, AutoupdateStage};
 use crate::cloud_object::model::actions::ObjectActionType;
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{CloudObject, GenericStringObjectFormat, JsonObjectType};
+use crate::cloud_object::model::persistence::ObjectStoreModel;
+use crate::cloud_object::update_manager::UpdateManager;
+use crate::cloud_object::{GenericStringObjectFormat, JsonObjectType, StoredObject};
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::context_chips::prompt::Prompt;
 use crate::context_chips::prompt_type::PromptType;
 use crate::context_chips::ContextChipKind;
 use crate::drive::settings::WarpDriveSettings;
-use crate::drive::CloudObjectTypeAndId;
+use crate::drive::ObjectTypeAndId;
 use crate::env_vars::{
     env_var_collection_block::{EnvVarCollectionBlock, EnvVarCollectionBlockEvent},
-    CloudEnvVarCollection, EnvVar,
+    EnvVar, EnvVarCollectionObject,
 };
 use crate::pane_group::focus_state::PaneFocusHandle;
 use crate::persistence::{self, FinishedCommandMetadata};
-use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::{ObjectUid, SyncId};
 #[cfg(feature = "local_fs")]
 use crate::settings::import::model::ImportedConfigModel;
@@ -290,9 +278,6 @@ use crate::terminal::session_settings::{
     SessionSettingsChangedEvent, DEFAULT_THRESHOLD_FOR_LONG_RUNNING_NOTIFICATION,
 };
 use crate::terminal::settings::{TerminalSettings, TerminalSettingsChangedEvent};
-use crate::terminal::shared_session::role_change_modal::{
-    RoleChangeCloseSource, RoleChangeOpenSource,
-};
 use crate::terminal::shared_session::{
     SharedSessionActionSource, SharedSessionScrollbackType, SharedSessionStatus,
 };
@@ -328,6 +313,11 @@ use crate::ActiveSession as WindowActiveSession;
 use crate::{report_if_error, AIAgentActionResultType};
 use crate::{safe_error, safe_warn};
 
+use crate::terminal::shared_session::protocol::{
+    AgentAttachment, ParticipantId, Role,
+    ServerConversationToken as SessionSharingServerConversationToken,
+    WindowSize as SessionSharingWindowSize,
+};
 use async_channel::{Receiver, Sender};
 use chrono::{DateTime, Local, NaiveDateTime};
 use command_corrections::rules::{Rule, RuleId as CommandCorrectionsRuleId};
@@ -342,11 +332,6 @@ use pathfinder_color::ColorU;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::json;
-use session_sharing_protocol::common::{
-    AgentAttachment, ParticipantId, Role, RoleRequestId, RoleRequestResponse,
-    ServerConversationToken as SessionSharingServerConversationToken,
-    WindowSize as SessionSharingWindowSize,
-};
 use shared_session::{SharedSessionAdapter, Viewer};
 use std::any::Any;
 use std::borrow::Cow;
@@ -377,16 +362,16 @@ use warpui::elements::new_scrollable::{
 };
 use warpui::elements::{
     get_rich_content_position_id, ChildAnchor, ClippedScrollStateHandle, Container,
-    CrossAxisAlignment, DispatchEventResult, DropTarget, DropTargetData, Empty, EventHandler,
-    Expanded, Flex, NewScrollable, OffsetPositioning, ParentAnchor, ParentElement,
-    ParentOffsetBounds, PositionedElementAnchor, PositionedElementOffsetBounds, Radius,
-    ScrollableElement, ScrollbarWidth, Shrinkable, Text,
+    CrossAxisAlignment, DispatchEventResult, DropTarget, DropTargetData, Empty, EventHandler, Flex,
+    NewScrollable, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds,
+    PositionedElementAnchor, PositionedElementOffsetBounds, Radius, ScrollableElement,
+    ScrollbarWidth, Shrinkable, Text,
 };
 use warpui::event::ModifiersState;
 use warpui::keymap::Keystroke;
 use warpui::notification::{NotificationSendError, RequestPermissionsOutcome, UserNotification};
 use warpui::platform::{Cursor, OperatingSystem};
-use warpui::r#async::{SpawnedFutureHandle, Timer};
+use warpui::r#async::Timer;
 use warpui::windowing::WindowManager;
 
 use warpui::assets::asset_cache::{AssetCache, AssetCacheEvent};
@@ -1350,9 +1335,6 @@ pub enum ContextMenuAction {
     CopyBlockCommands,
     CopyBlockOutputs,
     CopyBlockFilteredOutputs,
-    OpenShareBlockModal {
-        block_index: BlockIndex,
-    },
     FindWithinBlock,
     ToggleBookmark,
     ScrollToBottomOfBlock,
@@ -1373,7 +1355,6 @@ pub enum ContextMenuAction {
     OpenConversationShareDialog {
         conversation_id: AIConversationId,
     },
-    OpenShareSessionModal,
     StopSharing,
     /// Copy the AI block prompt text
     CopyAIBlockQuery {
@@ -1456,9 +1437,6 @@ impl fmt::Debug for ContextMenuAction {
             CopyBlocks => f.write_str("CopyBlocks"),
             CopyBlockCommands => f.write_str("CopyBlockCommands"),
             CopyBlockOutputs => f.write_str("CopyBlockOutputs"),
-            OpenShareBlockModal { block_index } => {
-                write!(f, "OpenShareModal {{ block_index: {block_index} }}")
-            }
             FindWithinBlock => f.write_str("FindWithinBlock"),
             ScrollToBottomOfBlock => f.write_str("ScrollToBottomOfBlock"),
             ScrollToTopOfBlock => f.write_str("ScrollToTopOfBlock"),
@@ -1474,7 +1452,6 @@ impl fmt::Debug for ContextMenuAction {
             EditCLIAgentToolbar => f.write_str("EditCLIAgentToolbar"),
             AskAI(_) => f.write_str("AskAIAssistant"),
             OpenWorkflowModal => f.write_str("OpenWorkflowModal"),
-            OpenShareSessionModal => f.write_str("OpenShareSessionModal"),
             CopyBlockFilteredOutputs => f.write_str("CopyBlockFilteredOutput"),
             StopSharing => f.write_str("StopSharing"),
             CopyAIBlockQuery { .. } => f.write_str("CopyAIBlockPrompt"),
@@ -1588,9 +1565,9 @@ pub struct ExecuteCommandEvent {
     pub command: String,
     pub session_id: SessionId,
 
-    /// If the command was executed from a [`CloudWorkflow`], pass its ID here.
+    /// If the command was executed from a [`WorkflowObject`], pass its ID here.
     pub workflow_id: Option<SyncId>,
-    /// If the command was executed from a [`CloudWorkflow`] or WorkflowType::Local, store the
+    /// If the command was executed from a [`WorkflowObject`] or WorkflowType::Local, store the
     /// templated command here.
     pub workflow_command: Option<String>,
 
@@ -1614,7 +1591,6 @@ pub enum Event {
     Escape,
     Exited,
     BlockListCleared,
-    ShareModalOpened(BlockIndex),
     SendNotification(BlockNotification),
     BlockCompleted {
         block: Arc<SerializedBlock>,
@@ -1633,7 +1609,7 @@ pub enum Event {
     // Tell the pane group to open the workflow modal.
     OpenWorkflowModalWithCommand(String),
     // Tell the pane group to open the workflow modal with an existing cloud workflow.
-    OpenWorkflowModalWithCloudWorkflow(SyncId),
+    OpenWorkflowModalWithWorkflowObject(SyncId),
     // Tell the pane group to open the workflow modal with an unsaved workflow.
     OpenWorkflowModalWithTemporary(Box<Workflow>),
     OpenWarpDriveObjectInPane(ObjectUid),
@@ -1665,9 +1641,6 @@ pub enum Event {
     OpenAgentToolbarEditor,
     OpenCLIAgentToolbarEditor,
     SummarizationCancelDialogToggled {
-        is_open: bool,
-    },
-    EnvironmentSetupModeSelectorToggled {
         is_open: bool,
     },
     CtrlD,
@@ -1728,22 +1701,14 @@ pub enum Event {
         scrollback_type: SharedSessionScrollbackType,
         source_type: SessionSourceType,
     },
-    EstablishedSharedSession {
-        session_id: session_sharing_protocol::common::SessionId,
-    },
     FailedToShareSession {
         reason: String,
         cause: Option<Arc<anyhow::Error>>,
     },
-    RejoinCurrentSession,
     StopSharingCurrentSession {
         reason: SessionEndedReason,
     },
     CloseRequested,
-    OpenShareSessionModal {
-        open_source: SharedSessionActionSource,
-    },
-    OpenShareSessionDeniedModal,
     /// Used to focus and bring this session to the foreground.
     FocusSession,
     /// Emitted when the onboarding init flow completes.
@@ -1752,41 +1717,12 @@ pub enum Event {
     OnboardingTutorialCompleted,
     SelectedBlocksChanged,
     SelectedTextChanged,
-    UpdateSessionLinkPermissions {
-        role: Option<Role>,
-    },
-    UpdateSessionTeamPermissions {
-        role: Option<Role>,
-        team_uid: String,
-    },
     /// Emitted when a shared session sharer updates a viewer's role and
     /// needs to notify the server of a role change.
     UpdateRole {
         participant_id: ParticipantId,
         role: Role,
     },
-    UpdateUserRole {
-        user_uid: UserUid,
-        role: Role,
-    },
-    UpdatePendingUserRole {
-        email: String,
-        role: Role,
-    },
-    AddGuests {
-        emails: Vec<String>,
-        role: Role,
-    },
-    RemoveGuest {
-        user_uid: UserUid,
-    },
-    RemovePendingGuest {
-        email: String,
-    },
-    MakeAllParticipantsReaders {
-        reason: RoleUpdateReason,
-    },
-    RequestSharedSessionRole(Role),
     /// A viewer in a shared session is requesting to send an agent prompt.
     SendAgentPrompt {
         server_conversation_token: Option<SessionSharingServerConversationToken>,
@@ -1810,23 +1746,6 @@ pub enum Event {
 
         /// The CRDT-compliant operations.
         operations: Rc<Vec<CrdtOperation>>,
-    },
-    /// Emitted when a shared session participant tries to
-    /// change a role. `source` dictates how the modal is rendered,
-    /// and what fields are needed
-    OpenSharedSessionRoleChangeModal {
-        source: RoleChangeOpenSource,
-    },
-    CloseSharedSessionRoleChangeModal(RoleChangeCloseSource),
-    RoleRequestInFlight {
-        role_request_id: RoleRequestId,
-    },
-    CancelRoleRequest(RoleRequestId),
-    RoleRequestCancelled(RoleRequestId),
-    RespondToRoleRequest {
-        participant_id: ParticipantId,
-        role_request_id: RoleRequestId,
-        response: RoleRequestResponse,
     },
     /// Emitted when a pending command (e.g. tab config setup commands) has
     /// been submitted and its block has completed.
@@ -1879,7 +1798,6 @@ pub enum Event {
         /// The initial prompt body content.
         initial_content: Option<String>,
     },
-    OpenEnvironmentManagementPane,
     OpenFilesPalette {
         source: PaletteSource,
     },
@@ -1931,6 +1849,13 @@ pub enum Event {
     RevealChildAgent {
         conversation_id: AIConversationId,
     },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum LongRunningCommandAgentInteractionState {
+    InControl,
+    TaggedIn,
+    NotInteracting,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2550,7 +2475,7 @@ pub struct TerminalView {
     ai_input_model: ModelHandle<BlocklistAIInputModel>,
     ai_context_model: ModelHandle<BlocklistAIContextModel>,
 
-    pending_env_var_collection: Option<CloudEnvVarCollection>,
+    pending_env_var_collection: Option<EnvVarCollectionObject>,
 
     ai_render_context: Rc<RefCell<BlocklistAIRenderContext>>,
 
@@ -2679,20 +2604,12 @@ pub struct TerminalView {
     /// Mouse state handle for the ambient agent cancel button in the pane header.
     ambient_agent_cancel_mouse_state: warpui::elements::MouseStateHandle,
 
-    /// Environment setup mode selector modal for /create-environment command.
-    environment_setup_mode_selector: ViewHandle<EnvironmentSetupModeSelector>,
-
-    /// Whether the environment setup mode selector is currently visible.
-    is_environment_setup_mode_selector_open: bool,
-
     /// Weak handle to the [`PaneStack`] this view is part of, allowing push/pop operations.
     pane_stack: Option<WeakModelHandle<crate::pane_group::pane::PaneStack<Self>>>,
 
     /// If set, indicates a cloud mode entry is waiting for the fullscreen agent view to be exited.
     /// This is used to ensure rich content inserted for cloud mode is scoped to the top-level
     /// terminal view (not a specific agent view conversation).
-    pending_cloud_mode_start_callback: Option<TerminalViewCallback>,
-    pending_cloud_mode_start_abort_handle: Option<SpawnedFutureHandle>,
 
     /// Whether we're waiting for the result of an AWS CLI login command.
     /// Used to detect "command not found" errors when AWS CLI isn't installed.
@@ -2943,8 +2860,7 @@ impl TerminalView {
                                 && !has_pending_blocks
                                 && !matches!(
                                     origin,
-                                    AgentViewEntryOrigin::CreateEnvironment
-                                        | AgentViewEntryOrigin::SlashInit
+                                    AgentViewEntryOrigin::SlashInit
                                         | AgentViewEntryOrigin::ThirdPartyCloudAgent
                                 );
                             if should_insert_zero_state_block {
@@ -3077,11 +2993,6 @@ impl TerminalView {
                         }
 
                         match rich_content.metadata() {
-                            Some(RichContentMetadata::InitEnvironment { block_handle })
-                                if !block_handle.as_ref(ctx).completed() =>
-                            {
-                                block_handle.update(ctx, |block, ctx| block.handle_ctrl_c(ctx));
-                            }
                             Some(RichContentMetadata::EnvVarCollectionBlock {
                                 env_var_collection_block_handle,
                             }) if !env_var_collection_block_handle
@@ -3103,7 +3014,7 @@ impl TerminalView {
                         conversation_utils::remove_conversation(
                             *conversation_id,
                             me.view_id,
-                            false, // Empty new conversations were never synced to the cloud.
+                            false,
                             ctx,
                         );
                     }
@@ -3160,8 +3071,6 @@ impl TerminalView {
                     if !should_keep_pending_user_query {
                         me.remove_pending_user_query_block(ctx);
                     }
-                    me.maybe_run_pending_cloud_mode_start_callback(ctx);
-
                     ctx.notify();
                 }
                 AgentViewControllerEvent::ExitConfirmed { .. } => {}
@@ -3384,21 +3293,6 @@ impl TerminalView {
             me.handle_ai_controller_event(handle, event, ctx);
         });
 
-        // Subscribe to agent conversations model for task status updates
-        ctx.subscribe_to_model(
-            &AgentConversationsModel::handle(ctx),
-            |me, _, event, ctx| {
-                let is_task_update = matches!(
-                    event,
-                    AgentConversationsModelEvent::TasksUpdated
-                        | AgentConversationsModelEvent::NewTasksReceived
-                );
-                if is_task_update {
-                    me.maybe_insert_tombstone_for_non_running_shared_ambient_task(ctx);
-                }
-            },
-        );
-
         let _ = ctx.spawn_stream_local(
             throttle(WAKEUP_THROTTLE_PERIOD, wakeups_rx),
             Self::handle_terminal_wakeup,
@@ -3526,7 +3420,7 @@ impl TerminalView {
                     && me.model.lock().shared_session_status().is_active_sharer()
                 {
                     me.auto_stop_sharing_on_cli_end = false;
-                    me.stop_sharing_session(SharedSessionActionSource::NonUser, ctx);
+                    me.stop_sharing_session(ctx);
                 }
             }
             me.handle_cli_agent_sessions_event(event, ctx)
@@ -3811,13 +3705,6 @@ impl TerminalView {
             }
         });
 
-        let environment_setup_mode_selector =
-            ctx.add_typed_action_view(EnvironmentSetupModeSelector::new);
-
-        ctx.subscribe_to_view(&environment_setup_mode_selector, |me, _, event, ctx| {
-            me.handle_environment_setup_mode_selector_event(event, ctx);
-        });
-
         ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, ai_settings_event, ctx| {
             if let AISettingsChangedEvent::AwsBedrockCredentialsEnabled { .. } = ai_settings_event {
                 if !UserWorkspaces::as_ref(ctx).is_aws_bedrock_credentials_enabled(ctx) {
@@ -3994,11 +3881,7 @@ impl TerminalView {
 
             is_pending_aws_login: false,
             manual_pty_shutdown_requested: false,
-            environment_setup_mode_selector,
-            is_environment_setup_mode_selector_open: false,
             pane_stack: None,
-            pending_cloud_mode_start_callback: None,
-            pending_cloud_mode_start_abort_handle: None,
             ephemeral_message_model,
             pending_user_query_view_id: None,
             queued_prompt_callback: None,
@@ -4272,45 +4155,6 @@ impl TerminalView {
         self.block_completed_callbacks.push(Box::new(callback));
     }
 
-    fn set_pending_cloud_mode_start_callback(
-        &mut self,
-        callback: TerminalViewCallback,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.clear_pending_cloud_mode_start_callback();
-        self.pending_cloud_mode_start_callback = Some(callback);
-
-        self.pending_cloud_mode_start_abort_handle = Some(ctx.spawn_abortable(
-            // Reuse the same timeout as agent-view confirmation prompts so a pending cloud-mode
-            // start cannot outlive the user-visible confirmation window semantics.
-            Timer::after(ENTER_OR_EXIT_CONFIRMATION_WINDOW),
-            |me, _, _ctx| {
-                me.pending_cloud_mode_start_callback = None;
-                me.pending_cloud_mode_start_abort_handle = None;
-            },
-            |_, _| (),
-        ));
-    }
-
-    fn clear_pending_cloud_mode_start_callback(&mut self) {
-        if let Some(handle) = self.pending_cloud_mode_start_abort_handle.take() {
-            handle.abort();
-        }
-        self.pending_cloud_mode_start_callback = None;
-    }
-
-    fn maybe_run_pending_cloud_mode_start_callback(&mut self, ctx: &mut ViewContext<Self>) {
-        let Some(callback) = self.pending_cloud_mode_start_callback.take() else {
-            return;
-        };
-
-        if let Some(handle) = self.pending_cloud_mode_start_abort_handle.take() {
-            handle.abort();
-        }
-
-        callback(self, ctx);
-    }
-
     fn can_exit_agent_view_for_terminal_view(
         &self,
         ctx: &AppContext,
@@ -4330,7 +4174,7 @@ impl TerminalView {
     }
 
     fn can_pop_nested_cloud_agent_view(&self, _ctx: &AppContext) -> bool {
-        // openWarp:cloud_mode 已删除,nested cloud agent view 永远不存在。
+        // openWarp:cloud_mode 已删除,nested agent view 永远不存在。
         false
     }
 
@@ -5161,7 +5005,7 @@ impl TerminalView {
                 self.maybe_send_agent_mode_desktop_notification(conversation_id, ctx);
 
                 // Show AI credits modal for cloud-mode out-of-credits failures.
-                if FeatureFlag::CloudMode.is_enabled()
+                if false
                     && self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent()
                     && !self.model.lock().is_shared_ambient_agent_session()
                 {
@@ -5179,9 +5023,8 @@ impl TerminalView {
                     }
                 }
 
-                // For conversation transcript viewers (on WASM) and shared ambient sessions on
-                // non-CloudModeSetupV2 paths, insert a conversation-ended tombstone when the
-                // conversation completes.
+                // For conversation transcript viewers (on WASM) and shared ambient sessions,
+                // insert a conversation-ended tombstone when the conversation completes.
                 // We only insert the tombstone once per session (when the conversation finishes).
                 // Skip during historical replay to avoid premature tombstone insertion.
                 let should_insert_tombstone = if !self.has_inserted_conversation_ended_tombstone
@@ -5191,17 +5034,13 @@ impl TerminalView {
                     {
                         let model = self.model.lock();
                         // On WASM, keep transcript viewers on the conversation-driven path.
-                        // Shared ambient sessions under CloudModeSetupV2 are handled via
-                        // AgentConversationsModel task liveness updates instead.
                         model.is_conversation_transcript_viewer()
-                            || (!FeatureFlag::CloudModeSetupV2.is_enabled()
-                                && model.is_shared_ambient_agent_session())
+                            || (!false && model.is_shared_ambient_agent_session())
                     }
                     #[cfg(not(target_family = "wasm"))]
                     {
                         // Show tombstone for shared ambient agent sessions
-                        self.model.lock().is_shared_ambient_agent_session()
-                            && !FeatureFlag::CloudModeSetupV2.is_enabled()
+                        self.model.lock().is_shared_ambient_agent_session() && !false
                     }
                 } else {
                     false
@@ -5249,7 +5088,7 @@ impl TerminalView {
             | BlocklistAIHistoryEvent::UpgradedTask { .. }
             | BlocklistAIHistoryEvent::UpdatedConversationArtifacts { .. }
             | BlocklistAIHistoryEvent::DeletedConversation { .. }
-            | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. } => {}
+            | BlocklistAIHistoryEvent::ConversationAgentIdAssigned { .. } => {}
         }
         ctx.notify();
     }
@@ -6052,7 +5891,7 @@ impl TerminalView {
                     })
                     .and_then(|citation| {
                         if let AIAgentCitation::WarpDriveObject { uid } = citation {
-                            CloudModel::as_ref(ctx).get_workflow_by_uid(&uid)
+                            ObjectStoreModel::as_ref(ctx).get_workflow_by_uid(&uid)
                         } else {
                             None
                         }
@@ -6463,48 +6302,6 @@ impl TerminalView {
         self.ambient_agent_task_id_for_details_panel_from_model(&model, app)
     }
 
-    fn can_show_cloud_mode_details_ui_for_task_id(task_id: Option<AmbientAgentTaskId>) -> bool {
-        FeatureFlag::CloudMode.is_enabled() && task_id.is_some()
-    }
-
-    fn can_show_cloud_mode_details_ui(&self, app: &AppContext) -> bool {
-        Self::can_show_cloud_mode_details_ui_for_task_id(
-            self.ambient_agent_task_id_for_details_panel(app),
-        )
-    }
-
-    fn maybe_insert_tombstone_for_non_running_shared_ambient_task(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !FeatureFlag::CloudModeSetupV2.is_enabled()
-            || self.has_inserted_conversation_ended_tombstone
-        {
-            return;
-        }
-
-        let task_id = {
-            let model = self.model.lock();
-            if !model.is_shared_ambient_agent_session()
-                || model.is_receiving_agent_conversation_replay()
-            {
-                return;
-            }
-            model.ambient_agent_task_id()
-        };
-
-        let Some(task_id) = task_id else {
-            return;
-        };
-        let Some(task) = AgentConversationsModel::as_ref(ctx).get_task_data(&task_id) else {
-            return;
-        };
-
-        if task.is_no_longer_running() {
-            self.insert_conversation_ended_tombstone(ctx);
-        }
-    }
-
     pub fn active_session(&self) -> &ModelHandle<ActiveSession> {
         &self.active_session
     }
@@ -6650,25 +6447,6 @@ impl TerminalView {
             return false;
         }
 
-        // In cloud agent conversations, once the shared session is ready but before the first
-        // agent exchange arrives, we hide the interactive input view. A non-interactive footer is
-        // rendered instead (see `TerminalView::render`).
-        if !FeatureFlag::CloudModeSetupV2.is_enabled()
-            && is_cloud_agent_pre_first_exchange(
-                &self.ambient_agent_view_model,
-                &self.agent_view_controller,
-                app,
-            )
-        {
-            return false;
-        }
-
-        if FeatureFlag::CreateEnvironmentSlashCommand.is_enabled()
-            && self.active_init_environment_block(app).is_some()
-        {
-            return false;
-        }
-
         if self.active_env_var_collection_block(app).is_some() {
             return false;
         }
@@ -6714,7 +6492,7 @@ impl TerminalView {
 
         if (active_ai_block.is_none() || has_active_long_running_agent_interaction)
             && is_active_and_long_running
-            && (!FeatureFlag::CloudModeSetupV2.is_enabled() || !is_oz_env_startup_command)
+            && (!false || !is_oz_env_startup_command)
             && !is_running_in_band_command
             && model.block_list().is_bootstrapped()
         {
@@ -7076,21 +6854,6 @@ impl TerminalView {
     /// Cancels the active agent conversation via the status bar's Ctrl+C handler.
     /// Includes shared session notification if applicable.
     fn cancel_active_conversation_via_status_bar(&mut self, ctx: &mut ViewContext<Self>) {
-        if FeatureFlag::AgentSharedSessions.is_enabled()
-            && self
-                .model
-                .lock()
-                .shared_session_status()
-                .is_sharer_or_viewer()
-        {
-            self.input.update(ctx, |input, ctx| {
-                input.cancel_active_agent_conversation_for_shared_session(
-                    CancellationReason::ManuallyCancelled,
-                    ctx,
-                );
-            });
-        }
-
         let status_bar = self.input.as_ref(ctx).agent_status_bar().clone();
         status_bar.update(ctx, |status_bar, ctx| {
             status_bar.handle_ctrl_c(ctx);
@@ -7114,10 +6877,6 @@ impl TerminalView {
             // is running — the parent AI block is already finished but the response
             // stream is still active. Route Ctrl+C to the status bar to cancel it.
             self.cancel_active_conversation_via_status_bar(ctx);
-        } else if let Some(active_init_env_block) = self.active_init_environment_block(ctx) {
-            active_init_env_block.update(ctx, |init_env_block, ctx| {
-                init_env_block.handle_ctrl_c(ctx);
-            });
         } else if self
             .passive_suggestions_models
             .legacy
@@ -9988,7 +9747,7 @@ impl TerminalView {
             ModelEvent::AfterBlockStarted {
                 command,
                 is_for_in_band_command,
-                block_id,
+                block_id: _,
                 ..
             } => {
                 let did_any_session_contains_remote_blocks =
@@ -10184,8 +9943,6 @@ impl TerminalView {
                             );
                         }
                     }
-
-                    self.maybe_insert_setup_command_blocks(block_id, ctx);
 
                     self.set_current_state(TerminalViewState::LongRunning, ctx);
                     ctx.emit(Event::BlockStarted {
@@ -10398,7 +10155,7 @@ impl TerminalView {
 
                     // If the block was a cloud workflow, record the workflow execution as an object action.
                     if let Some(cloud_workflow_id) = cloud_workflow_id {
-                        let id_and_type = CloudObjectTypeAndId::Workflow(*cloud_workflow_id);
+                        let id_and_type = ObjectTypeAndId::Workflow(*cloud_workflow_id);
                         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
                             update_manager.record_object_action(
                                 id_and_type,
@@ -10410,7 +10167,7 @@ impl TerminalView {
                     }
 
                     if let Some(cloud_env_var_collection_id) = cloud_env_var_collection_id {
-                        let id_and_type = CloudObjectTypeAndId::GenericStringObject {
+                        let id_and_type = ObjectTypeAndId::GenericStringObject {
                             object_type: GenericStringObjectFormat::Json(
                                 JsonObjectType::EnvVarCollection,
                             ),
@@ -11694,7 +11451,7 @@ impl TerminalView {
         let should_show_onboarding = FeatureFlag::AgentOnboarding.is_enabled()
             && !is_onboarded
             && !is_anonymous_or_logged_out;
-        let is_launch_modal_open = OneTimeModalModel::as_ref(ctx).is_oz_launch_modal_open();
+        let is_launch_modal_open = OneTimeModalModel::as_ref(ctx).is_openwarp_launch_modal_open();
 
         let has_plugin_instructions_block = self.rich_content_views.iter().any(|rc| {
             matches!(
@@ -12057,216 +11814,6 @@ impl TerminalView {
         });
     }
 
-    /// Open the Environment Management pane.
-    fn open_environment_management_pane(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.emit(Event::OpenEnvironmentManagementPane);
-    }
-
-    fn enter_environment_setup_selector(&mut self, args: Vec<String>, ctx: &mut ViewContext<Self>) {
-        // If arguments are provided (repo paths/URLs), skip the mode selector and go directly
-        // to the local agent flow
-        if !args.is_empty() {
-            self.setup_cloud_environment_and_start(args, ctx);
-            return;
-        }
-
-        // If already in ambient agent mode, skip the mode selector and go
-        // directly to the environment management pane
-        if FeatureFlag::AgentView.is_enabled()
-            && self.agent_view_controller.as_ref(ctx).is_active()
-            && self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent()
-        {
-            self.open_environment_management_pane(ctx);
-            return;
-        }
-
-        // No arguments provided and not in agent view - show the mode selector modal
-        // Note: We don't call close_overlays here because this action may be dispatched
-        // from within the input view (e.g., slash command execution), and calling
-        // close_overlays would attempt to update the input view while it's already
-        // being updated, causing a circular view update panic.
-        self.is_environment_setup_mode_selector_open = true;
-        ctx.emit(Event::EnvironmentSetupModeSelectorToggled { is_open: true });
-        ctx.notify();
-        // Focus the mode selector so it can receive keyboard events (ESC to dismiss)
-        ctx.focus(&self.environment_setup_mode_selector);
-    }
-
-    fn setup_cloud_environment(&mut self, args: Vec<String>, ctx: &mut ViewContext<Self>) {
-        if FeatureFlag::AgentView.is_enabled()
-            && !self.agent_view_controller.as_ref(ctx).is_active()
-        {
-            self.enter_agent_view_for_new_conversation(
-                None,
-                AgentViewEntryOrigin::CreateEnvironment,
-                ctx,
-            );
-        }
-
-        let repos = args;
-        let (button_label, use_current_dir) = if !repos.is_empty() {
-            (
-                format!(
-                    "Create environment using the supplied repos: {}",
-                    repos.join(", ")
-                ),
-                false,
-            )
-        } else {
-            #[cfg(feature = "local_fs")]
-            let is_repo = {
-                if let Some(pwd_path) = self
-                    .pwd()
-                    .and_then(|pwd| Path::new(&pwd).canonicalize().ok())
-                {
-                    DetectedRepositories::as_ref(ctx)
-                        .get_root_for_path(&pwd_path)
-                        .is_some()
-                } else {
-                    false
-                }
-            };
-
-            #[cfg(not(feature = "local_fs"))]
-            let is_repo = false;
-
-            if is_repo {
-                (
-                    "Create environment using the current working dir as repo".to_string(),
-                    true,
-                )
-            } else {
-                ("Create environment without any repos".to_string(), false)
-            }
-        };
-
-        let init_env_block = ctx.add_typed_action_view(move |ctx| {
-            InitEnvironmentBlock::new(button_label, repos, use_current_dir, ctx)
-        });
-        ctx.subscribe_to_view(&init_env_block, move |me, block, event, ctx| match event {
-            InitEnvironmentBlockEvent::StartSetup(repos, use_current_dir) => {
-                log::info!("TerminalView: received StartSetup event from InitEnvironmentBlock");
-
-                // Remove the block from the UI now that setup is starting
-                me.model
-                    .lock()
-                    .block_list_mut()
-                    .remove_rich_content(block.id());
-
-                me.start_cloud_environment_setup(repos.to_vec(), *use_current_dir, ctx);
-            }
-        });
-
-        self.insert_rich_content(
-            None,
-            init_env_block.clone(),
-            Some(RichContentMetadata::InitEnvironment {
-                block_handle: init_env_block,
-            }),
-            RichContentInsertionPosition::Append {
-                insert_below_long_running_block: true,
-            },
-            ctx,
-        );
-
-        self.redetermine_global_focus(ctx);
-    }
-
-    fn handle_environment_setup_mode_selector_event(
-        &mut self,
-        event: &EnvironmentSetupModeSelectorEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            EnvironmentSetupModeSelectorEvent::Selected(mode) => {
-                self.is_environment_setup_mode_selector_open = false;
-                ctx.emit(Event::EnvironmentSetupModeSelectorToggled { is_open: false });
-
-                match mode {
-                    EnvironmentSetupMode::RemoteGitHub => {
-                        // Open the environment management pane (form-based flow)
-                        self.open_environment_management_pane(ctx);
-                    }
-                    EnvironmentSetupMode::LocalRepositories => {
-                        // Use the agent-based flow, directly starting without confirmation
-                        // When the mode selector is shown, no args were provided
-                        self.setup_cloud_environment_and_start(Vec::new(), ctx);
-                    }
-                }
-                self.redetermine_global_focus(ctx);
-                ctx.notify();
-            }
-            EnvironmentSetupModeSelectorEvent::Dismissed => {
-                self.is_environment_setup_mode_selector_open = false;
-                ctx.emit(Event::EnvironmentSetupModeSelectorToggled { is_open: false });
-                self.redetermine_global_focus(ctx);
-                ctx.notify();
-            }
-        }
-    }
-
-    fn setup_cloud_environment_and_start(
-        &mut self,
-        args: Vec<String>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if FeatureFlag::AgentView.is_enabled()
-            && !self.agent_view_controller.as_ref(ctx).is_active()
-        {
-            self.enter_agent_view_for_new_conversation(
-                None,
-                AgentViewEntryOrigin::CreateEnvironment,
-                ctx,
-            );
-        }
-
-        let repos = args;
-
-        #[cfg(feature = "local_fs")]
-        let use_current_dir = repos.is_empty()
-            && self
-                .pwd()
-                .and_then(|pwd| Path::new(&pwd).canonicalize().ok())
-                .is_some_and(|pwd_path| {
-                    DetectedRepositories::as_ref(ctx)
-                        .get_root_for_path(&pwd_path)
-                        .is_some()
-                });
-
-        #[cfg(not(feature = "local_fs"))]
-        let use_current_dir = false;
-
-        self.start_cloud_environment_setup(repos, use_current_dir, ctx);
-    }
-
-    fn start_cloud_environment_setup(
-        &mut self,
-        repos: Vec<String>,
-        use_current_dir: bool,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // Clear input and switch to Agent Mode
-        self.input.update(ctx, |input, ctx| {
-            input
-                .editor()
-                .update(ctx, |editor, ctx| editor.clear_buffer(ctx));
-            input.set_input_mode_agent(false, ctx);
-        });
-
-        // Send the CreateEnvironment request (shows "/create-environment" instead of full prompt)
-        self.ai_controller.update(ctx, |controller, ctx| {
-            controller.send_slash_command_request(
-                SlashCommandRequest::CreateEnvironment {
-                    repos,
-                    use_current_dir,
-                },
-                ctx,
-            );
-        });
-
-        ctx.notify();
-    }
-
     #[cfg(feature = "local_fs")]
     fn update_repo_banner_state(&mut self, _directory: PathBuf, ctx: &mut ViewContext<Self>) {
         self.remove_agent_setup_speedbump_banner(ctx);
@@ -12398,7 +11945,7 @@ impl TerminalView {
 /// Gets display strings for:
 /// - Toggle input mode: from TerminalKeybindings (editable binding)
 /// - Submit to local agent: fixed binding (cmd-enter / ctrl-shift-enter)
-/// - Submit to cloud agent: fixed binding (cmd-alt-enter / ctrl-alt-enter)
+/// - Submit to ambient agent: fixed binding (cmd-alt-enter / ctrl-alt-enter)
 fn build_onboarding_keybindings(ctx: &AppContext) -> OnboardingKeybindings {
     let toggle_input_mode = TerminalKeybindings::handle(ctx)
         .as_ref(ctx)
@@ -15010,19 +14557,9 @@ impl TerminalView {
         self.close_context_menu(ctx, false);
         self.close_block_filter_editor(ctx);
         self.close_find_bar(ctx);
-        self.close_environment_setup_mode_selector(ctx);
-
         self.input.update(ctx, |input, ctx| {
             input.close_overlays(true, ctx);
         });
-    }
-
-    fn close_environment_setup_mode_selector(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.is_environment_setup_mode_selector_open {
-            self.is_environment_setup_mode_selector_open = false;
-            ctx.emit(Event::EnvironmentSetupModeSelectorToggled { is_open: false });
-            ctx.notify();
-        }
     }
 
     fn prompt_context_menu_items(&self, ctx: &AppContext) -> Vec<MenuItem<TerminalAction>> {
@@ -15365,7 +14902,7 @@ impl TerminalView {
         workflow_id: SyncId,
         ctx: &mut ViewContext<Self>,
     ) {
-        ctx.emit(Event::OpenWorkflowModalWithCloudWorkflow(workflow_id));
+        ctx.emit(Event::OpenWorkflowModalWithWorkflowObject(workflow_id));
         ctx.notify();
     }
 
@@ -15672,7 +15209,7 @@ impl TerminalView {
         );
         items.push(MenuItem::Separator);
 
-        // CloudConversations was removed in OpenWarp; share-conversation menu item omitted.
+        // Remote conversation sharing was removed in OpenWarp; share-conversation menu item omitted.
         let _ = ai_conversation_id;
 
         items.push(
@@ -18127,7 +17664,7 @@ impl TerminalView {
                 ctx.emit(Event::OpenAIFactCollection { sync_id: *sync_id });
             }
             AIBlockEvent::OpenWorkflow { sync_id } => {
-                if let Some(object) = CloudModel::as_ref(ctx).get_workflow(sync_id) {
+                if let Some(object) = ObjectStoreModel::as_ref(ctx).get_workflow(sync_id) {
                     ctx.emit(Event::OpenWarpDriveObjectInPane(object.uid()));
                 }
             }
@@ -18391,34 +17928,6 @@ impl TerminalView {
         })
     }
 
-    /// Returns the last block's `InitEnvironmentBlock` if it is uncompleted, scoped to the
-    /// currently visible conversation.
-    fn active_init_environment_block(
-        &self,
-        ctx: &AppContext,
-    ) -> Option<&ViewHandle<InitEnvironmentBlock>> {
-        let last_visible_block = if FeatureFlag::AgentView.is_enabled() {
-            let visible_conversation_id = self
-                .agent_view_controller
-                .as_ref(ctx)
-                .agent_view_state()
-                .active_conversation_id();
-            self.rich_content_views
-                .iter()
-                .rev()
-                .find(|rc| rc.agent_view_conversation_id() == visible_conversation_id)
-        } else {
-            self.rich_content_views.last()
-        }?;
-
-        if let Some(RichContentMetadata::InitEnvironment { block_handle }) =
-            last_visible_block.metadata()
-        {
-            return (!block_handle.as_ref(ctx).completed()).then_some(block_handle);
-        }
-        None
-    }
-
     fn ai_block_handle_by_view_id(&self, view_id: EntityId) -> Option<&ViewHandle<AIBlock>> {
         self.rich_content_views.iter().find_map(|rich_content| {
             let ai_metadata = rich_content.ai_block_metadata()?;
@@ -18573,11 +18082,6 @@ impl TerminalView {
             (self.active_ai_block(ctx), is_input_visible)
         {
             ctx.focus(active_ai_block_view_handle);
-        } else if let Some(active_init_environment_block_handle) =
-            self.active_init_environment_block(ctx)
-        {
-            active_init_environment_block_handle
-                .update(ctx, |block, ctx| block.try_steal_focus(ctx));
         } else if let Some(env_var_collection_block_handle) =
             self.active_env_var_collection_block(ctx)
         {
@@ -18652,18 +18156,6 @@ impl TerminalView {
             self.focus_input_box(ctx);
         }
     }
-
-    // OpenWarp:Share Block 路径已切断,下面两个方法保留签名但仅关闭右键菜单,
-    // 不再向 Warp Inc 上传 block,也不再 emit `Event::ShareModalOpened`。
-    fn context_menu_open_share_block_modal(
-        &mut self,
-        _block_index: BlockIndex,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.close_context_menu(ctx, true);
-    }
-
-    fn open_share_block_modal(&mut self, _ctx: &mut ViewContext<Self>) {}
 
     fn context_menu_copy_blocks(&mut self, ctx: &mut ViewContext<Self>) {
         self.copy_blocks(BlockEntity::CommandAndOutput, ctx);
@@ -19295,9 +18787,6 @@ impl TerminalView {
             InputEvent::OpenAddMCPPane => {
                 self.handle_action(&TerminalAction::OpenAddMCPPane, ctx);
             }
-            InputEvent::OpenEnvironmentManagementPane => {
-                self.open_environment_management_pane(ctx);
-            }
             InputEvent::OpenFilesPalette { source } => {
                 ctx.emit(Event::OpenFilesPalette { source: *source })
             }
@@ -19335,27 +18824,12 @@ impl TerminalView {
             InputEvent::ScrollToExchange { exchange_id } => {
                 self.scroll_to_exchange(*exchange_id, ctx);
             }
-            InputEvent::TriggerEnvironmentSetup { repos } => {
-                self.enter_environment_setup_selector(repos.clone(), ctx);
-            }
             InputEvent::RegisterPluginListener(agent) => {
                 self.register_cli_agent_listener_without_session_start_event(*agent, ctx);
             }
             #[cfg(not(target_family = "wasm"))]
             InputEvent::OpenPluginInstructionsPane(agent, kind) => {
                 ctx.emit(Event::OpenPluginInstructionsPane(*agent, *kind));
-            }
-            InputEvent::OpenShareSessionModal => {
-                self.open_share_session_modal(SharedSessionActionSource::FooterChip, ctx);
-            }
-            InputEvent::StartRemoteControl => {
-                self.attempt_to_share_session(
-                    SharedSessionScrollbackType::All,
-                    Some(SharedSessionActionSource::FooterChip),
-                    SessionSourceType::default(),
-                    true,
-                    ctx,
-                );
             }
         }
     }
@@ -19406,9 +18880,7 @@ impl TerminalView {
         initial_prompt: Option<String>,
         ctx: &mut ViewContext<Self>,
     ) {
-        if !FeatureFlag::CloudMode.is_enabled()
-            || !self.model.lock().shared_session_status().is_view_pending()
-        {
+        if !false || !self.model.lock().shared_session_status().is_view_pending() {
             // Ambient agent setup can only be done inside a shared session viewer; otherwise the backing terminal manager is incorrect.
             return;
         }
@@ -20275,14 +19747,6 @@ impl TerminalView {
             .map(|ai_metadata| ai_metadata.ai_block_handle.clone())
     }
 
-    /// Returns the environment setup mode selector view handle for tab-level rendering.
-    pub fn environment_setup_mode_selector_handle(
-        &self,
-    ) -> Option<&ViewHandle<EnvironmentSetupModeSelector>> {
-        self.is_environment_setup_mode_selector_open
-            .then_some(&self.environment_setup_mode_selector)
-    }
-
     pub fn summarization_cancel_dialog_handle(
         &self,
         ctx: &AppContext,
@@ -21030,10 +20494,7 @@ impl TerminalView {
             );
         }
 
-        if (FeatureFlag::CreatingSharedSessions.is_enabled()
-            && ContextFlag::CreateSharedSession.is_enabled())
-            || FeatureFlag::ViewingSharedSessions.is_enabled()
-        {
+        if model.shared_session_status().is_sharer_or_viewer() {
             let is_shared_ambient_agent_session = model.is_shared_ambient_agent_session();
             match &self.inline_banners_state.shared_session_banner_state {
                 SharedSessionBanners::ActiveShare {
@@ -21222,8 +20683,7 @@ impl TerminalView {
 
         // If this is a shared session viewer and the width required to display the entire
         // terminal is larger than the width of the pane, we should make it horizontally scrollable.
-        let should_be_horizontal_scrollable = FeatureFlag::ViewingSharedSessions.is_enabled()
-            && model.shared_session_status().is_active_viewer()
+        let should_be_horizontal_scrollable = model.shared_session_status().is_active_viewer()
             && required_terminal_width > pane_width;
 
         let theme = appearance.theme();
@@ -21546,8 +21006,7 @@ impl TerminalView {
         // If this is a shared session viewer and the width required to display the entire
         // terminal is larger than the width of the pane, we should make it horizontally scrollable.
         // If there aren't any visible blocks, we should not show a horizontally-scrollable view.
-        let should_be_horizontal_scrollable = FeatureFlag::ViewingSharedSessions.is_enabled()
-            && model.shared_session_status().is_active_viewer()
+        let should_be_horizontal_scrollable = model.shared_session_status().is_active_viewer()
             && model
                 .block_list()
                 .blocks()
@@ -21944,10 +21403,6 @@ impl TerminalView {
     fn context_menu_action(&mut self, action: &ContextMenuAction, ctx: &mut ViewContext<Self>) {
         use ContextMenuAction::*;
 
-        // TODO: handle sharing session with > 1 block selected
-        let source = SharedSessionActionSource::BlocklistContextMenu {
-            block_index: self.selected_blocks.tail(),
-        };
         match action {
             InsertSelectedText => self.context_menu_insert_selected_text(ctx),
             CopySelectedText => self.context_menu_copy_selected_text(ctx),
@@ -21955,9 +21410,6 @@ impl TerminalView {
             CopyBlocks => self.context_menu_copy_blocks(ctx),
             CopyBlockCommands => self.context_menu_copy_block_commands(ctx),
             CopyBlockOutputs => self.context_menu_copy_block_outputs(ctx),
-            OpenShareBlockModal { block_index } => {
-                self.context_menu_open_share_block_modal(*block_index, ctx)
-            }
             FindWithinBlock => self.find_within_block(ctx),
             ScrollToBottomOfBlock => self.scroll_to_bottom_of_bottommost_selected_block(ctx),
             ScrollToTopOfBlock => self.scroll_to_top_of_topmost_selected_block(ctx),
@@ -22001,8 +21453,7 @@ impl TerminalView {
                 self.ask_ai(ask_source, ctx);
             }
             OpenWorkflowModal => self.open_workflow_modal(ctx),
-            OpenShareSessionModal => self.open_share_session_modal(source, ctx),
-            StopSharing => self.stop_sharing_session(source, ctx),
+            StopSharing => self.stop_sharing_session(ctx),
             CopyBlockFilteredOutputs => self.context_menu_copy_filtered_block_outputs(ctx),
             CopyAIBlockQuery { ai_block_view_id } => {
                 for rich_content in self.rich_content_views.iter() {
@@ -22056,7 +21507,7 @@ impl TerminalView {
                 }
             }
             OpenConversationShareDialog { conversation_id: _ } => {
-                // AI conversation sharing was removed alongside the CloudConversations feature.
+                // AI conversation sharing was removed alongside remote conversation sharing.
             }
             CopyAgentCommand { ai_block_view_id } => {
                 for rich_content in self.rich_content_views.iter() {
@@ -22615,7 +22066,7 @@ impl TerminalView {
         collection_title: String,
         command: String,
         session_id: SessionId,
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
         ctx: &mut ViewContext<Self>,
     ) {
         let block_id = Uuid::new_v4().to_string();
@@ -22644,7 +22095,7 @@ impl TerminalView {
 
                     UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
                         update_manager.record_object_action(
-                            cloud_object_type_and_id,
+                            object_type_and_id,
                             ObjectActionType::Execute,
                             None,
                             ctx,
@@ -22734,7 +22185,7 @@ impl TerminalView {
 
     pub fn invoke_environment_variables(
         &mut self,
-        cloud_env_var_collection: CloudEnvVarCollection,
+        cloud_env_var_collection: EnvVarCollectionObject,
         in_subshell: bool,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -22778,7 +22229,7 @@ impl TerminalView {
 
     fn invoke_env_vars_in_current_session(
         &mut self,
-        cloud_env_var_collection: CloudEnvVarCollection,
+        cloud_env_var_collection: EnvVarCollectionObject,
         shell_type: ShellType,
         session_id: Option<SessionId>,
         ctx: &mut ViewContext<Self>,
@@ -22797,7 +22248,7 @@ impl TerminalView {
                     .collect_vec()
                     .join(" "),
                 session_id,
-                cloud_env_var_collection.cloud_object_type_and_id(),
+                cloud_env_var_collection.object_type_and_id(),
                 ctx,
             );
         } else {
@@ -22822,7 +22273,7 @@ impl TerminalView {
 
     fn invoke_env_vars_in_subshell(
         &mut self,
-        cloud_env_var_collection: CloudEnvVarCollection,
+        cloud_env_var_collection: EnvVarCollectionObject,
         shell_session_info: (String, ShellType),
         window_id: WindowId,
         ctx: &mut ViewContext<Self>,
@@ -22853,7 +22304,7 @@ impl TerminalView {
         // Ok to update the execution record here because we auto-execute when in subshell
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
             update_manager.record_object_action(
-                cloud_env_var_collection.cloud_object_type_and_id(),
+                cloud_env_var_collection.object_type_and_id(),
                 ObjectActionType::Execute,
                 None,
                 ctx,
@@ -23410,7 +22861,6 @@ impl TypedActionView for TerminalView {
             | CopyCommands
             | MaybeHoverSecret { .. }
             | CopyGitBranch
-            | OpenShareModal
             | ReinputCommands
             | ReinputCommandsWithSudo
             | ClearBuffer
@@ -23449,7 +22899,6 @@ impl TypedActionView for TerminalView {
             | VimModeBanner(_)
             | InsertMostRecentCommandCorrection
             | StopSharingCurrentSession { .. }
-            | RequestSharedSessionRole(_)
             | OnboardingFlow(_)
             | ImportSettings
             | DragAndDropFiles(_)
@@ -23513,12 +22962,7 @@ impl TypedActionView for TerminalView {
             | OpenWorkflowModal
             | OpenWorkflowModalForAIWorkflow(_)
             | OpenWorkflowModalForBlock(_)
-            | OpenWorkflowModalWithCloudWorkflow(_)
-            | OpenShareSessionModal { .. }
-            | OpenSharedSessionViewerRoleMenu
-            | CopySharedSessionLink { .. }
-            | OpenSharedSessionOnDesktop { .. }
-            | MakeAllParticipantsReaders { .. }
+            | OpenWorkflowModalWithWorkflowObject(_)
             | AskAIAssistant { .. }
             | ToggleSnackbarInActivePane
             | SetInputModeAgent
@@ -23548,10 +22992,6 @@ impl TypedActionView for TerminalView {
             | AddProjectAtCurrentDirectory
             | AgentModeSetupSpeedbumpBanner(_)
             | AnonymousUserAISignUpBanner(_)
-            | SetupCloudEnvironment(_)
-            | SetupCloudEnvironmentAndStart(_)
-            | TriggerEnvironmentSetupSelection(_)
-            | OpenEnvironmentManagementPane
             | DismissCodeToolbeltTooltip
             | SummarizeConversation
             | ToggleLongRunningCommandControl
@@ -23559,7 +22999,6 @@ impl TypedActionView for TerminalView {
             | OpenConversationsPalette
             | ExitAgentView
             | StartNewAgentConversation
-            | ToggleCloudModeDetailsPanel
             | CancelAmbientAgentTask
             | OpenInlineHistoryMenu
             | OpenModelSelector
@@ -23720,7 +23159,6 @@ impl TypedActionView for TerminalView {
                 };
                 self.copy_prompt(&prompt_position, &PromptPart::GitBranch, ctx)
             }
-            OpenShareModal => self.open_share_block_modal(ctx),
             ReinputCommands => self.reinput_commands(false, ctx),
             ReinputCommandsWithSudo => self.reinput_commands(true, ctx),
             ClearBuffer => self.clear_buffer(ctx),
@@ -23900,7 +23338,7 @@ impl TypedActionView for TerminalView {
             OpenWorkflowModalForBlock(block_index) => {
                 self.open_workflow_modal_from_block(*block_index, ctx)
             }
-            OpenWorkflowModalWithCloudWorkflow(workflow_id) => {
+            OpenWorkflowModalWithWorkflowObject(workflow_id) => {
                 self.open_workflow_modal_with_existing(*workflow_id, ctx)
             }
             OpenBlockListContextMenu => self.open_block_list_context_menu_via_keybinding(ctx),
@@ -24004,23 +23442,13 @@ impl TypedActionView for TerminalView {
                     send_telemetry_from_ctx!(TelemetryEvent::SettingsImportInitiated, ctx);
                 }
             }
-            OpenShareSessionModal { source } => self.open_share_session_modal(*source, ctx),
-            StopSharingCurrentSession { source } => self.stop_sharing_session(*source, ctx),
+            StopSharingCurrentSession { .. } => self.stop_sharing_session(ctx),
             ToggleBlockFilterOnSelectedOrLastBlock(source) => {
                 self.toggle_block_filter_on_selected_or_last_block(*source, ctx);
             }
-            CopySharedSessionLink { source } => self.copy_shared_session_link(*source, ctx),
             ToggleSnackbarInActivePane => self.toggle_snackbar_in_active_pane(ctx),
-            MakeAllParticipantsReaders { reason } => {
-                self.make_all_shared_session_participants_readers(*reason, ctx)
-            }
-            OpenSharedSessionViewerRoleMenu => self.open_shared_session_viewer_role_menu(ctx),
-            RequestSharedSessionRole(role) => self.request_shared_session_role(*role, ctx),
             MiddleClickOnGrid { position } => self.middle_click_on_grid(position, ctx),
             MiddleClickOnInput => self.middle_click_on_input(ctx),
-            OpenSharedSessionOnDesktop { source } => {
-                self.open_shared_session_on_desktop(*source, ctx)
-            }
             SelectAIAttachedBlock(block_index) => {
                 self.scroll_to_and_maybe_select_block(*block_index, ctx)
             }
@@ -24350,18 +23778,6 @@ impl TypedActionView for TerminalView {
                     cli_agent: None,
                 }));
             }
-            SetupCloudEnvironment(repos) => {
-                self.setup_cloud_environment(repos.clone(), ctx);
-            }
-            SetupCloudEnvironmentAndStart(repos) => {
-                self.setup_cloud_environment_and_start(repos.clone(), ctx);
-            }
-            TriggerEnvironmentSetupSelection(repos) => {
-                self.enter_environment_setup_selector(repos.clone(), ctx);
-            }
-            OpenEnvironmentManagementPane => {
-                self.open_environment_management_pane(ctx);
-            }
             SummarizeConversation => self.summarize_conversation(ctx),
             AddProjectAtCurrentDirectory => {
                 // Get the current working directory and add it as a project
@@ -24527,9 +23943,6 @@ impl TypedActionView for TerminalView {
             AwsCliNotInstalledBanner(action) => {
                 self.handle_aws_cli_not_installed_banner_action(*action, ctx);
             }
-            ToggleCloudModeDetailsPanel => {
-                ctx.notify();
-            }
             CancelAmbientAgentTask => {
                 self.ambient_agent_view_model.update(ctx, |model, ctx| {
                     model.cancel_task(ctx);
@@ -24621,64 +24034,47 @@ impl View for TerminalView {
                 self.render_waterfall_gap_element(&model, &viewport, active_gap, appearance, app)
             }
             (input_mode, _, _) => {
-                if self.input.as_ref(app).is_cloud_mode_input_v2_composing(app) {
-                    column.add_child(Expanded::new(1., self.render_input()).finish());
-
-                    Stack::new()
-                        .with_constrain_absolute_children()
-                        .with_child(column.finish())
-                } else {
-                    let output_area = if (model.shared_session_status().is_view_pending()
-                        && !self.ambient_agent_view_model.as_ref(app).is_ambient_agent())
-                        || model.is_loading_conversation_transcript()
-                    {
-                        self.render_viewer_loading(app)
-                    } else if is_alt_screen_active {
-                        did_wrap_terminal_size = true;
-                        wrap_in_terminal_size_element(
-                            &self.resize_tx,
-                            self.render_alt_screen_element(
-                                app,
-                                &model,
-                                model.alt_screen().selection_range(semantic_selection),
-                            ),
-                        )
-                    } else {
-                        self.render_block_list_element(&model, input_mode, true, app)
-                    };
-
-                    column.add_child(Shrinkable::new(1., output_area).finish());
-
-                    if model.is_alt_screen_active()
-                        && self.should_render_use_agent_footer(&model, app)
-                    {
-                        column.add_child(ChildView::new(&self.use_agent_footer).finish());
-                    }
-
-                    if self.is_input_box_visible(&model, app) {
-                        column.add_child(self.render_input());
-                    } else if !model.is_read_only()
-                        && is_cloud_agent_pre_first_exchange(
-                            &self.ambient_agent_view_model,
-                            &self.agent_view_controller,
+                let output_area = if (model.shared_session_status().is_view_pending()
+                    && !self.ambient_agent_view_model.as_ref(app).is_ambient_agent())
+                    || model.is_loading_conversation_transcript()
+                {
+                    self.render_viewer_loading(app)
+                } else if is_alt_screen_active {
+                    did_wrap_terminal_size = true;
+                    wrap_in_terminal_size_element(
+                        &self.resize_tx,
+                        self.render_alt_screen_element(
                             app,
-                        )
-                    {
-                        column.add_child(ambient_agent::render_loading_footer(appearance));
-                    } else if self.show_remote_server_loading_footer(&model, app) {
-                        column.add_child(
-                            self.render_remote_server_loading_footer(&model, appearance, app),
-                        );
-                    }
+                            &model,
+                            model.alt_screen().selection_range(semantic_selection),
+                        ),
+                    )
+                } else {
+                    self.render_block_list_element(&model, input_mode, true, app)
+                };
 
-                    let stack = Stack::new()
-                        .with_constrain_absolute_children()
-                        .with_child(column.finish());
-                    if matches!(input_mode, InputMode::Waterfall) && !is_alt_screen_active {
-                        self.render_waterfall_mode_background(&model, stack, app)
-                    } else {
-                        stack
-                    }
+                column.add_child(Shrinkable::new(1., output_area).finish());
+
+                if model.is_alt_screen_active() && self.should_render_use_agent_footer(&model, app)
+                {
+                    column.add_child(ChildView::new(&self.use_agent_footer).finish());
+                }
+
+                if self.is_input_box_visible(&model, app) {
+                    column.add_child(self.render_input());
+                } else if self.show_remote_server_loading_footer(&model, app) {
+                    column.add_child(
+                        self.render_remote_server_loading_footer(&model, appearance, app),
+                    );
+                }
+
+                let stack = Stack::new()
+                    .with_constrain_absolute_children()
+                    .with_child(column.finish());
+                if matches!(input_mode, InputMode::Waterfall) && !is_alt_screen_active {
+                    self.render_waterfall_mode_background(&model, stack, app)
+                } else {
+                    stack
                 }
             }
         };
@@ -24687,7 +24083,7 @@ impl View for TerminalView {
             self.render_grid_tooltip(&mut stack, &model, appearance, app);
         }
 
-        if !FeatureFlag::CloudModeSetupV2.is_enabled() {
+        if !false {
             // Show progress steps while waiting for an ambient agent to start.
             if self
                 .ambient_agent_view_model
@@ -24696,58 +24092,6 @@ impl View for TerminalView {
                 .is_some()
             {
                 stack.add_child(self.render_ambient_agent_progress(appearance, app));
-            }
-        }
-
-        // For shared session viewers, we want to show a "Request edit access"
-        // button near the input if the input (or the button) are being hovered.
-        // This is disabled when the viewer is offline.
-        if let Some(Viewer {
-            input_request_edit_access_button_handle,
-            pending_role_request,
-            is_reconnecting,
-            ..
-        }) = self.shared_session_viewer()
-        {
-            if model.shared_session_status().is_reader()
-                && !*is_reconnecting
-                && !pending_role_request
-                && self.context_menu_state.is_none()
-                && self.is_input_box_visible(&model, app)
-                && (self
-                    .input_hoverable_handle
-                    .lock()
-                    .is_ok_and(|handle| handle.is_hovered())
-                    || input_request_edit_access_button_handle
-                        .lock()
-                        .is_ok_and(|handle| handle.is_hovered()))
-            {
-                // Position the button above / below the input depending
-                // on the input model.
-                let input_anchor = match input_mode {
-                    InputMode::PinnedToBottom => PositionedElementAnchor::TopMiddle,
-                    InputMode::PinnedToTop => PositionedElementAnchor::BottomMiddle,
-                    InputMode::Waterfall => {
-                        if model.block_list().active_gap().is_some() {
-                            PositionedElementAnchor::BottomMiddle
-                        } else {
-                            PositionedElementAnchor::TopMiddle
-                        }
-                    }
-                };
-                stack.add_positioned_overlay_child(
-                    self.render_input_request_edit_access_button(
-                        input_request_edit_access_button_handle.clone(),
-                        appearance,
-                    ),
-                    OffsetPositioning::offset_from_save_position_element(
-                        self.input.as_ref(app).status_free_input_save_position_id(),
-                        Vector2F::zero(),
-                        PositionedElementOffsetBounds::WindowByPosition,
-                        input_anchor,
-                        ChildAnchor::Center,
-                    ),
-                );
             }
         }
 
@@ -25016,7 +24360,7 @@ impl View for TerminalView {
             }
         }
 
-        // Render first-time cloud agent setup view when in Setup status
+        // First-time ambient-agent setup has been removed in OpenWarp.
         if self.ambient_agent_view_model.as_ref(app).is_in_setup() {}
 
         if self.ssh_file_upload.as_ref(app).has_upload() {

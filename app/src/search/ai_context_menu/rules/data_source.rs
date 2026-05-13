@@ -1,8 +1,8 @@
 use super::search_item::RuleSearchItem;
-use crate::ai::facts::{AIFact, CloudAIFactModel};
+use crate::ai::facts::{AIFact, AIFactObjectModel};
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::CloudObject;
+use crate::cloud_object::model::persistence::ObjectStoreModel;
+use crate::cloud_object::StoredObject;
 use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
 use crate::search::data_source::{Query, QueryResult};
 use crate::search::mixer::{DataSourceRunErrorWrapper, SyncDataSource};
@@ -31,11 +31,11 @@ impl SyncDataSource for RulesDataSource {
     ) -> Result<Vec<QueryResult<Self::Action>>, DataSourceRunErrorWrapper> {
         let query_text = &query.text;
 
-        let cloud_model = CloudModel::as_ref(app);
+        let cloud_model = ObjectStoreModel::as_ref(app);
         let mut rule_results = Vec::new();
 
         let mut rules: Vec<_> = cloud_model
-            .get_all_objects_of_type::<GenericStringObjectId, CloudAIFactModel>()
+            .get_all_objects_of_type::<GenericStringObjectId, AIFactObjectModel>()
             .filter(|ai_fact| !ai_fact.is_trashed(cloud_model))
             .collect();
 

@@ -11,21 +11,21 @@ use crate::{
     },
     cloud_object::{
         model::{
-            persistence::{CloudModel, CloudModelEvent},
-            view::{CloudViewModel, CloudViewModelEvent, UpdateTimestamp},
+            persistence::{ObjectStoreEvent, ObjectStoreModel},
+            view::{ObjectStoreViewModel, ObjectStoreViewModelEvent, UpdateTimestamp},
         },
-        CloudObject, CloudObjectLocation, GenericCloudObject, GenericStringObjectFormat,
-        JsonObjectType, ObjectType, Space,
+        update_manager::{FetchSingleObjectOption, UpdateManager},
+        GenericStoredObject, GenericStringObjectFormat, JsonObjectType, ObjectType, Space,
+        StoredObject, StoredObjectLocation,
     },
     editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions},
-    env_vars::CloudEnvVarCollection,
+    env_vars::EnvVarCollectionObject,
     features::FeatureFlag,
     menu::{Event, Menu, MenuItem, MenuItemFields},
     network::NetworkStatus,
-    notebooks::CloudNotebookModel,
+    notebooks::NotebookObjectModel,
     report_if_error, send_telemetry_from_ctx,
     server::{
-        cloud_objects::update_manager::{FetchSingleObjectOption, UpdateManager},
         ids::{ClientId, ObjectUid, ServerId, SyncId},
         telemetry::TelemetryEvent,
     },
@@ -38,23 +38,21 @@ use crate::{
     },
     util::{color::coloru_with_opacity, sync::Condition},
     view_components::{Dropdown, DropdownItem},
-    workflows::{CloudWorkflow, WorkflowViewMode},
+    workflows::{WorkflowObject, WorkflowViewMode},
     workspace::active_terminal_in_window,
-    workspaces::{
-        update_manager::TeamUpdateManager, user_workspaces::UserWorkspaces, workspace::WorkspaceUid,
-    },
+    workspaces::{user_workspaces::UserWorkspaces, workspace::WorkspaceUid},
     ObjectActions,
 };
 
 use super::{
-    cloud_object_naming_dialog::CloudObjectNamingDialog,
+    cloud_object_naming_dialog::ObjectNamingDialog,
     drive_helpers::{
         has_feature_gated_anonymous_user_reached_env_var_limit,
         has_feature_gated_anonymous_user_reached_notebook_limit,
         has_feature_gated_anonymous_user_reached_workflow_limit,
     },
     empty_trash_confirmation_dialog::{EmptyTrashConfirmationDialog, EmptyTrashConfirmationEvent},
-    folders::CloudFolder,
+    folders::FolderObject,
     items::{
         ai_fact_collection::WarpDriveAIFactCollection,
         item::{tools_panel_menu_direction, ItemStates, WarpDriveRow},
@@ -63,7 +61,7 @@ use super::{
     },
     settings::WarpDriveSettings,
     sharing::ContentEditability,
-    CloudObjectTypeAndId, DriveObjectType, DriveSortOrder,
+    DriveObjectType, DriveSortOrder, ObjectTypeAndId,
 };
 use crate::drive::panel::DrivePanelAction;
 use futures::Future;
@@ -171,7 +169,7 @@ struct DriveIndexSectionState {
     empty_trash_mouse_state: MouseStateHandle,
 }
 
-impl DropTargetData for CloudObjectLocation {
+impl DropTargetData for StoredObjectLocation {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -191,9 +189,9 @@ pub enum DriveIndexSection {
 
 #[derive(Debug, Clone)]
 pub enum DriveIndexAction {
-    OpenObject(CloudObjectTypeAndId),
+    OpenObject(ObjectTypeAndId),
     OpenWorkflowInPane {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
         open_mode: WorkflowViewMode,
     },
     OpenImportModal {
@@ -214,12 +212,12 @@ pub enum DriveIndexAction {
         content: String,
         is_for_agent_mode: bool,
     },
-    CopyObjectToClipboard(CloudObjectTypeAndId),
-    CopyWorkflowId(CloudObjectTypeAndId),
-    DuplicateObject(CloudObjectTypeAndId),
+    CopyObjectToClipboard(ObjectTypeAndId),
+    CopyWorkflowId(ObjectTypeAndId),
+    DuplicateObject(ObjectTypeAndId),
     CopyObjectLinkToClipboard(String),
     OpenObjectLinkOnDesktop(Url),
-    ExportObject(CloudObjectTypeAndId),
+    ExportObject(ObjectTypeAndId),
     ToggleNewAssetsMenu(Space),
     ToggleSortingMenu,
     ToggleItemOverflowMenu {
@@ -231,44 +229,44 @@ pub enum DriveIndexAction {
         offset: Vector2F,
     },
     MoveObject {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
         new_space: Space,
     },
-    OpenCloudObjectNamingDialog {
+    OpenObjectNamingDialog {
         space: Space,
         object_type: DriveObjectType,
         // only present when renaming an existing item
-        cloud_object_type_and_id: Option<CloudObjectTypeAndId>,
+        object_type_and_id: Option<ObjectTypeAndId>,
         initial_folder_id: Option<SyncId>,
     },
-    CloseCloudObjectNamingDialog,
+    CloseObjectNamingDialog,
     DropIndexItem {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
-        drop_target_location: CloudObjectLocation,
+        object_type_and_id: ObjectTypeAndId,
+        drop_target_location: StoredObjectLocation,
     },
     UpdateCurrentDropTarget {
-        drop_target_location: CloudObjectLocation,
+        drop_target_location: StoredObjectLocation,
     },
     ClearDropTarget,
     ToggleSectionCollapsed(DriveIndexSection),
     OpenTeamSettingsPage,
-    RunObject(CloudObjectTypeAndId),
+    RunObject(ObjectTypeAndId),
     OpenWorkflowModalWithNew {
         space: Space,
         initial_folder_id: Option<SyncId>,
     },
-    OpenWorkflowModalWithCloudWorkflow(SyncId),
+    OpenWorkflowModalWithWorkflowObject(SyncId),
     ToggleFolderOpen(SyncId),
-    CollapseAllInLocation(CloudObjectLocation),
-    InvokeEnvVarCollectionInSubshell(CloudObjectTypeAndId),
+    CollapseAllInLocation(StoredObjectLocation),
+    InvokeEnvVarCollectionInSubshell(ObjectTypeAndId),
     TrashObject {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
     },
     UntrashObject {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
     },
     DeleteObject {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
     },
     EmptyTrash {
         space: Space,
@@ -285,7 +283,7 @@ pub enum DriveIndexAction {
     UpdateSortingChoice {
         sorting_choice: DriveSortOrder,
     },
-    RetryFailedObject(CloudObjectTypeAndId),
+    RetryFailedObject(ObjectTypeAndId),
     RetryAllFailedObjects,
     RevertFailedObject(ServerId),
     OpenTrashIndex,
@@ -301,12 +299,6 @@ pub enum DriveIndexAction {
     EscapeKey,
     /// Hitting cmd+enter on a WD item toggles the context menu.
     ToggleDriveItemContextMenu,
-    ViewPlans {
-        team_uid: ServerId,
-    },
-    ManageBilling {
-        team_uid: ServerId,
-    },
     SignupAnonymousUser,
     DismissPersonalObjectLimits,
     SetCurrentWorkspace(WorkspaceUid),
@@ -321,10 +313,10 @@ impl DriveIndexAction {
     ) -> Self {
         match (space, object_type) {
             // creating a folder requires a name, which is entered from the cloud object dialog
-            (_, DriveObjectType::Folder) => DriveIndexAction::OpenCloudObjectNamingDialog {
+            (_, DriveObjectType::Folder) => DriveIndexAction::OpenObjectNamingDialog {
                 object_type,
                 space,
-                cloud_object_type_and_id: None,
+                object_type_and_id: None,
                 initial_folder_id,
             },
             (
@@ -347,10 +339,7 @@ impl DriveIndexAction {
 
     pub fn blocked_for_anonymous_user(&self) -> bool {
         use DriveIndexAction::*;
-        matches!(
-            self,
-            OpenTeamSettingsPage | ViewPlans { .. } | ManageBilling { .. }
-        )
+        matches!(self, OpenTeamSettingsPage)
     }
 }
 
@@ -359,8 +348,6 @@ impl From<&DriveIndexAction> for LoginGatedFeature {
         use DriveIndexAction::*;
         match val {
             OpenTeamSettingsPage => "Open Team Settings",
-            ViewPlans { .. } => "View Plans",
-            ManageBilling { .. } => "Manage Billing",
             _ => "Unknown reason",
         }
     }
@@ -397,25 +384,25 @@ pub enum DriveIndexEvent {
     },
     OpenAIFactCollection,
     OpenMCPServerCollection,
-    OpenObject(CloudObjectTypeAndId),
+    OpenObject(ObjectTypeAndId),
     OpenWorkflowInPane {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
+        object_type_and_id: ObjectTypeAndId,
         open_mode: WorkflowViewMode,
     },
-    DuplicateObject(CloudObjectTypeAndId),
-    ExportObject(CloudObjectTypeAndId),
+    DuplicateObject(ObjectTypeAndId),
+    ExportObject(ObjectTypeAndId),
     OpenTeamSettingsPage,
     OpenImportModal {
         space: Space,
         initial_folder_id: Option<SyncId>,
     },
-    RunObject(CloudObjectTypeAndId),
-    InvokeEnvVarCollectionInSubshell(CloudObjectTypeAndId),
+    RunObject(ObjectTypeAndId),
+    InvokeEnvVarCollectionInSubshell(ObjectTypeAndId),
     OpenWorkflowModalWithNew {
         space: Space,
         initial_folder_id: Option<SyncId>,
     },
-    OpenWorkflowModalWithCloudWorkflow(SyncId),
+    OpenWorkflowModalWithWorkflowObject(SyncId),
     FocusWarpDrive,
     OpenSharedObjectsCreationDeniedModal(DriveObjectType, ServerId),
     AttachPlanAsContext(AIDocumentId),
@@ -429,8 +416,6 @@ struct MouseStateHandles {
     exit_trash_button_mouse_state: MouseStateHandle,
     join_team_button_mouse_state: MouseStateHandle,
     create_team_button_mouse_state: MouseStateHandle,
-    shared_object_limit_hit_banner_button_mouse_state: MouseStateHandle,
-    payment_issue_banner_button_mouse_state: MouseStateHandle,
     anonymous_sign_up_button_mouse_state: MouseStateHandle,
     anonymous_object_limit_close_button_mouse_state: MouseStateHandle,
     search_button_mouse_state: MouseStateHandle,
@@ -472,8 +457,8 @@ pub struct DriveIndex {
     section_states: HashMap<DriveIndexSection, DriveIndexSectionState>,
     clipped_scroll_state: ClippedScrollStateHandle,
     mouse_state_handles: MouseStateHandles,
-    cloud_object_naming_dialog: CloudObjectNamingDialog,
-    current_drop_target: Option<CloudObjectLocation>,
+    cloud_object_naming_dialog: ObjectNamingDialog,
+    current_drop_target: Option<StoredObjectLocation>,
     empty_trash_confirmation_dialog: ViewHandle<EmptyTrashConfirmationDialog>,
     empty_trash_confirmation_dialog_space: Option<Space>,
     sorting_button_menu_open: bool,
@@ -483,7 +468,7 @@ pub struct DriveIndex {
     should_show_personal_object_limit_status: bool,
     /// A hashmap of location (space/folder) to a list of hashed IDs of objects inside
     /// the space/folder, used for rendering our objects
-    sorted_orders_by_location: HashMap<CloudObjectLocation, Vec<ObjectUid>>,
+    sorted_orders_by_location: HashMap<StoredObjectLocation, Vec<ObjectUid>>,
     /// A sorted list of all the items (spaces + objects) in Warp Drive
     /// Unlike sorted_orders_by_location, this is not used for rendering
     /// This is used for object focusing and WD keyboard navigation
@@ -574,7 +559,7 @@ impl DriveIndex {
             dropdown.set_selected_by_index(selected_index, ctx);
         });
 
-        let cloud_model = CloudModel::handle(ctx);
+        let cloud_model = ObjectStoreModel::handle(ctx);
 
         let spaces = user_workspaces.update(ctx, |user_workspaces, ctx| {
             user_workspaces.all_user_spaces(ctx)
@@ -630,16 +615,16 @@ impl DriveIndex {
         self.sorted_orders_by_location.clear();
         spaces.iter().for_each(|space| {
             self.sort_location(
-                CloudObjectLocation::Space(*space),
+                StoredObjectLocation::Space(*space),
                 cloud_model.as_ref(ctx),
-                CloudViewModel::as_ref(ctx),
+                ObjectStoreViewModel::as_ref(ctx),
                 ctx,
             );
         });
 
         // Set item focusing parameters (ordered_items and focused_index) at initialization
         // If an item is already focused, retrieve focused item ID then re-sort ordered_items
-        // Otherwise, re-sort ordered_items to ensure it is always accurate after a cloudmodel change
+        // Otherwise, re-sort ordered_items to ensure it is always accurate after a ObjectStoreModel change
         if self.ordered_items.is_empty() {
             self.compute_ordered_items(cloud_model.as_ref(ctx));
             self.focused_index = Some(0);
@@ -655,17 +640,17 @@ impl DriveIndex {
         self.has_initialized_sections.wait()
     }
 
-    /// Recursively sorts the objects within a CloudObjectLocation and its children, storing the sorted list
+    /// Recursively sorts the objects within a StoredObjectLocation and its children, storing the sorted list
     /// of HashedObjectId's in the DriveIndex's sorted_orders_by_location.
     fn sort_location(
         &mut self,
-        location: CloudObjectLocation,
-        cloud_model: &CloudModel,
-        cloud_view_model: &CloudViewModel,
+        location: StoredObjectLocation,
+        cloud_model: &ObjectStoreModel,
+        cloud_view_model: &ObjectStoreViewModel,
         app: &AppContext,
     ) {
         let item_iter = match (self.index_variant, location) {
-            (DriveIndexVariant::MainIndex, CloudObjectLocation::Space(Space::Shared)) => {
+            (DriveIndexVariant::MainIndex, StoredObjectLocation::Space(Space::Shared)) => {
                 let user_uid = AuthStateProvider::as_ref(app).get().user_id();
                 cloud_model
                     .active_cloud_objects_in_location_without_descendents(location, app)
@@ -689,7 +674,7 @@ impl DriveIndex {
                     UpdateTimestamp::Revision,
                     app,
                 )),
-            (DriveIndexVariant::Trash, CloudObjectLocation::Space(space)) => cloud_model
+            (DriveIndexVariant::Trash, StoredObjectLocation::Space(space)) => cloud_model
                 .directly_trashed_cloud_objects_in_space(space, app)
                 .sorted_by(self.sorting_choice.sort_by(
                     cloud_view_model,
@@ -707,7 +692,7 @@ impl DriveIndex {
 
         let mut items = vec![];
         // Add the AI fact collection object + MCP server collection object for personal space
-        if matches!(location, CloudObjectLocation::Space(Space::Personal)) {
+        if matches!(location, StoredObjectLocation::Space(Space::Personal)) {
             items.push(self.mcp_server_collection.id().to_string());
             items.push(self.ai_fact_collection.id().to_string());
         }
@@ -716,11 +701,11 @@ impl DriveIndex {
             item_iter
                 .map(|object| {
                     if object.object_type() == ObjectType::Folder {
-                        let folder: Option<&CloudFolder> = object.into();
+                        let folder: Option<&FolderObject> = object.into();
                         if let Some(folder) = folder {
                             if folder.model().is_open {
                                 self.sort_location(
-                                    CloudObjectLocation::Folder(folder.id),
+                                    StoredObjectLocation::Folder(folder.id),
                                     cloud_model,
                                     cloud_view_model,
                                     app,
@@ -737,20 +722,21 @@ impl DriveIndex {
     }
 
     /// Recursively populates and sorts the ordered_items list used for WD keyboard navigation
-    fn sort_ordered_items(&mut self, uids: Vec<String>, cloud_model: &CloudModel) {
+    fn sort_ordered_items(&mut self, uids: Vec<String>, cloud_model: &ObjectStoreModel) {
         for uid in uids {
             if let Some(cloud_object) = cloud_model.get_by_uid(&uid) {
                 // Add object to the list
-                let cloud_id = cloud_object.cloud_object_type_and_id();
+                let cloud_id = cloud_object.object_type_and_id();
                 self.ordered_items.push(WarpDriveItemId::Object(cloud_id));
                 // If the item is a folder and the folder is open, recurse
-                if let CloudObjectTypeAndId::Folder(folder_id) = cloud_id {
+                if let ObjectTypeAndId::Folder(folder_id) = cloud_id {
                     if self
                         .sorted_orders_by_location
-                        .contains_key(&CloudObjectLocation::Folder(folder_id))
+                        .contains_key(&StoredObjectLocation::Folder(folder_id))
                     {
                         self.sort_ordered_items(
-                            self.sorted_orders_by_location[&CloudObjectLocation::Folder(folder_id)]
+                            self.sorted_orders_by_location
+                                [&StoredObjectLocation::Folder(folder_id)]
                                 .clone(),
                             cloud_model,
                         )
@@ -761,7 +747,7 @@ impl DriveIndex {
     }
 
     /// Sets the ordered_items vector used for WD keyboard navigation
-    fn compute_ordered_items(&mut self, cloud_model: &CloudModel) {
+    fn compute_ordered_items(&mut self, cloud_model: &ObjectStoreModel) {
         self.ordered_items.clear();
         for section in self.sections.clone() {
             if let DriveIndexSection::Space(space) = section {
@@ -786,7 +772,7 @@ impl DriveIndex {
                         // Sort and add the rest of the items in the space
                         let Some(uids) = self
                             .sorted_orders_by_location
-                            .get(&CloudObjectLocation::Space(space))
+                            .get(&StoredObjectLocation::Space(space))
                         else {
                             return;
                         };
@@ -801,7 +787,7 @@ impl DriveIndex {
     }
 
     /// Updates both ordered_items and focused_index, the parameters used for WD keyboard navigation
-    fn update_focused_params(&mut self, focused_index: usize, cloud_model: &CloudModel) {
+    fn update_focused_params(&mut self, focused_index: usize, cloud_model: &ObjectStoreModel) {
         // Error check to make sure indexing into ordered_items will be valid
         if focused_index < self.ordered_items.len() {
             // Retrieve the focused item ID, then re-sort ordered_items
@@ -820,18 +806,18 @@ impl DriveIndex {
     }
 
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
-        let cloud_model = CloudModel::handle(ctx);
+        let cloud_model = ObjectStoreModel::handle(ctx);
         ctx.observe(&cloud_model, Self::on_cloud_model_changed);
 
         let object_actions = ObjectActions::handle(ctx);
         ctx.observe(&object_actions, Self::on_object_actions_changed);
 
         ctx.subscribe_to_model(&cloud_model, |index, _, event, ctx| {
-            index.handle_cloud_model_event(event, ctx);
+            index.handle_object_store_event(event, ctx);
         });
 
         ctx.subscribe_to_model(
-            &CloudViewModel::handle(ctx),
+            &ObjectStoreViewModel::handle(ctx),
             Self::handle_cloud_view_model_event,
         );
 
@@ -878,7 +864,7 @@ impl DriveIndex {
         let sorting_choice = *WarpDriveSettings::as_ref(ctx).sorting_choice.value();
 
         let initial_load_complete =
-            crate::cloud_object::model::persistence::CloudModel::as_ref(ctx)
+            crate::cloud_object::model::persistence::ObjectStoreModel::as_ref(ctx)
                 .initial_load_complete();
         ctx.spawn(initial_load_complete, |me, _, ctx| {
             me.initialize_section_states(ctx);
@@ -938,7 +924,7 @@ impl DriveIndex {
             section_states: Default::default(),
             clipped_scroll_state: Default::default(),
             mouse_state_handles: Default::default(),
-            cloud_object_naming_dialog: CloudObjectNamingDialog::new(title_editor),
+            cloud_object_naming_dialog: ObjectNamingDialog::new(title_editor),
             current_drop_target: None,
             empty_trash_confirmation_dialog,
             empty_trash_confirmation_dialog_space: None,
@@ -959,24 +945,20 @@ impl DriveIndex {
         }
     }
 
-    fn edit_object_enabled(
-        &self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
-        app: &AppContext,
-    ) -> bool {
-        self.is_online(app) || !cloud_object_type_and_id.has_server_id()
+    fn edit_object_enabled(&self, object_type_and_id: &ObjectTypeAndId, app: &AppContext) -> bool {
+        self.is_online(app) || !object_type_and_id.has_server_id()
     }
 
     fn online_only_operation_allowed(
         &self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
+        object_type_and_id: &ObjectTypeAndId,
         app: &AppContext,
     ) -> bool {
-        if let Some(object) = CloudModel::as_ref(app).get_by_uid(&cloud_object_type_and_id.uid()) {
+        if let Some(object) = ObjectStoreModel::as_ref(app).get_by_uid(&object_type_and_id.uid()) {
             // OpenWarp(去中心化分支):本地对象(无 server_id,SyncQueue 上行无 auth no-op)
             // 在原逻辑下永远拿不到 trash/move 菜单。这里把"无 server_id"视为本地对象,
             // 允许其执行本地侧操作(trash 走 sqlite,无需服务器协调)。
-            if !cloud_object_type_and_id.has_server_id() {
+            if !object_type_and_id.has_server_id() {
                 return !object.metadata().has_pending_online_only_change();
             }
 
@@ -1014,7 +996,7 @@ impl DriveIndex {
              * Follow:
              * https://linear.app/warpdotdev/issue/CLD-1557/unable-to-open-folder-when-selected-notebook-resides-in-closed-folder
              * for a proper fix.
-            CloudModel::handle(ctx).update(ctx, |model, ctx| {
+            ObjectStoreModel::handle(ctx).update(ctx, |model, ctx| {
                 model.force_expand_object_and_ancestors_cloud_id(id, ctx);
             });
             */
@@ -1080,7 +1062,7 @@ impl DriveIndex {
 
     fn on_cloud_model_changed(
         &mut self,
-        cloud_model: ModelHandle<CloudModel>,
+        cloud_model: ModelHandle<ObjectStoreModel>,
         ctx: &mut ViewContext<Self>,
     ) {
         self.initialize_section_states(ctx);
@@ -1123,31 +1105,30 @@ impl DriveIndex {
         }
     }
 
-    fn handle_cloud_model_event(&mut self, event: &CloudModelEvent, ctx: &mut ViewContext<Self>) {
+    fn handle_object_store_event(&mut self, event: &ObjectStoreEvent, ctx: &mut ViewContext<Self>) {
         match event {
-            CloudModelEvent::ObjectForceExpanded { id } => {
+            ObjectStoreEvent::ObjectForceExpanded { id } => {
                 self.expand_section_for_object(id, ctx);
             }
-            CloudModelEvent::ObjectUpdated { .. }
-            | CloudModelEvent::ObjectTrashed { .. }
-            | CloudModelEvent::ObjectUntrashed { .. }
-            | CloudModelEvent::ObjectCreated { .. }
-            | CloudModelEvent::ObjectMoved { .. }
-            | CloudModelEvent::ObjectDeleted { .. }
-            | CloudModelEvent::ObjectPermissionsUpdated { .. }
-            | CloudModelEvent::NotebookEditorChangedFromServer { .. }
-            | CloudModelEvent::ObjectSynced { .. }
-            | CloudModelEvent::InitialLoadCompleted => {}
+            ObjectStoreEvent::ObjectUpdated { .. }
+            | ObjectStoreEvent::ObjectTrashed { .. }
+            | ObjectStoreEvent::ObjectUntrashed { .. }
+            | ObjectStoreEvent::ObjectCreated { .. }
+            | ObjectStoreEvent::ObjectMoved { .. }
+            | ObjectStoreEvent::ObjectDeleted { .. }
+            | ObjectStoreEvent::ObjectPermissionsUpdated { .. }
+            | ObjectStoreEvent::NotebookEditorChangedExternally { .. }
+            | ObjectStoreEvent::InitialLoadCompleted => {}
         }
     }
 
     fn handle_cloud_view_model_event(
         &mut self,
-        _handle: ModelHandle<CloudViewModel>,
-        event: &CloudViewModelEvent,
+        _handle: ModelHandle<ObjectStoreViewModel>,
+        event: &ObjectStoreViewModelEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        let CloudViewModelEvent::SortTimestampsChanged = event;
+        let ObjectStoreViewModelEvent::SortTimestampsChanged = event;
         self.initialize_section_states(ctx);
         ctx.notify();
     }
@@ -1161,16 +1142,16 @@ impl DriveIndex {
     ) {
         if let WarpDriveItemId::Object(object_id) = item_id {
             match object_id {
-                CloudObjectTypeAndId::Notebook(sync_id) => {
+                ObjectTypeAndId::Notebook(sync_id) => {
                     self.expand_section_for_object(&sync_id.uid().clone(), ctx);
                 }
-                CloudObjectTypeAndId::Workflow(sync_id) => {
+                ObjectTypeAndId::Workflow(sync_id) => {
                     self.expand_section_for_object(&sync_id.uid().clone(), ctx);
                 }
-                CloudObjectTypeAndId::Folder(sync_id) => {
+                ObjectTypeAndId::Folder(sync_id) => {
                     self.expand_section_for_object(&sync_id.uid().clone(), ctx);
                 }
-                CloudObjectTypeAndId::GenericStringObject { object_type, id } => {
+                ObjectTypeAndId::GenericStringObject { object_type, id } => {
                     if let GenericStringObjectFormat::Json(JsonObjectType::EnvVarCollection) =
                         object_type
                     {
@@ -1187,7 +1168,7 @@ impl DriveIndex {
 
     /// Expand the section that contains an object identified by `id`.
     fn expand_section_for_object(&mut self, id: &ObjectUid, ctx: &mut ViewContext<DriveIndex>) {
-        let Some(space) = CloudViewModel::as_ref(ctx).object_space(id, ctx) else {
+        let Some(space) = ObjectStoreViewModel::as_ref(ctx).object_space(id, ctx) else {
             return;
         };
 
@@ -1518,7 +1499,7 @@ impl DriveIndex {
         // Only show Empty Trash button when online, do not show for Shared space
         if self.is_online(app) && space != &Space::Shared {
             // Disable Empty Trash button if trash is empty
-            let cloud_model = CloudModel::as_ref(app);
+            let cloud_model = ObjectStoreModel::as_ref(app);
             if cloud_model
                 .directly_trashed_cloud_objects_in_space(*space, app)
                 .count()
@@ -1880,7 +1861,7 @@ impl DriveIndex {
     fn render_space_items(
         &self,
         space: Space,
-        cloud_model: &CloudModel,
+        cloud_model: &ObjectStoreModel,
         item_mouse_states: &Vec<ItemStates>,
         active_hover_preview: bool,
         appearance: &Appearance,
@@ -1888,11 +1869,11 @@ impl DriveIndex {
     ) -> Vec<Box<dyn Element>> {
         let mut items = vec![];
         let mut space_idx = 0;
-        let cloud_view_model = CloudViewModel::as_ref(app);
+        let cloud_view_model = ObjectStoreViewModel::as_ref(app);
 
         let results = self
             .sorted_orders_by_location
-            .get(&CloudObjectLocation::Space(space))
+            .get(&StoredObjectLocation::Space(space))
             .cloned()
             .unwrap_or_else(|| {
                 match self.index_variant {
@@ -1901,7 +1882,7 @@ impl DriveIndex {
                         let is_shared_space = space == Space::Shared;
                         cloud_model
                             .active_cloud_objects_in_location_without_descendents(
-                                CloudObjectLocation::Space(space),
+                                StoredObjectLocation::Space(space),
                                 app,
                             )
                             .filter(move |cloud_object| {
@@ -2201,7 +2182,7 @@ impl DriveIndex {
         &self,
         section: DriveIndexSection,
         appearance: &Appearance,
-        cloud_model: &CloudModel,
+        cloud_model: &ObjectStoreModel,
         app: &AppContext,
     ) -> Option<impl Iterator<Item = Box<dyn Element>>> {
         let mut rendered_space = vec![];
@@ -2358,7 +2339,7 @@ impl DriveIndex {
 
     fn render_all_sections(&self, app: &AppContext) -> impl Iterator<Item = Box<dyn Element>> {
         let appearance = Appearance::as_ref(app);
-        let cloud_model = CloudModel::as_ref(app);
+        let cloud_model = ObjectStoreModel::as_ref(app);
 
         let mut sections = vec![];
 
@@ -2376,7 +2357,7 @@ impl DriveIndex {
                 section_content = section_content.with_padding_bottom(PADDING_BETWEEN_SPACES);
 
                 if let DriveIndexSection::Space(space) = section {
-                    let location = CloudObjectLocation::Space(*space);
+                    let location = StoredObjectLocation::Space(*space);
                     sections.push(self.render_as_drop_target(
                         section_content.finish(),
                         location,
@@ -2397,7 +2378,7 @@ impl DriveIndex {
             let trash_row = self.render_trash_row(appearance, app);
             sections.push(self.render_as_drop_target(
                 trash_row,
-                CloudObjectLocation::Trash,
+                StoredObjectLocation::Trash,
                 appearance,
             ));
         }
@@ -2578,13 +2559,13 @@ impl DriveIndex {
     #[allow(clippy::too_many_arguments)]
     fn render_item_and_children(
         &self,
-        object: &dyn CloudObject,
+        object: &dyn StoredObject,
         item_mouse_states: &Vec<ItemStates>,
         space: Space,
         space_index: usize,
         folder_depth: usize,
         active_hover_preview: bool,
-        cloud_model: &CloudModel,
+        cloud_model: &ObjectStoreModel,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Option<RenderedWarpDriveItemAndChildren> {
@@ -2593,9 +2574,10 @@ impl DriveIndex {
         }
 
         let mut stack = Stack::new();
-        let row_object_id = object.cloud_object_type_and_id();
+        let row_object_id = object.object_type_and_id();
         let warp_drive_item_id = WarpDriveItemId::Object(row_object_id);
-        let access_level = CloudViewModel::as_ref(app).access_level(&row_object_id.uid(), app);
+        let access_level =
+            ObjectStoreViewModel::as_ref(app).access_level(&row_object_id.uid(), app);
 
         // OpenWarp Phase 2a: sharing dialog removed; pass `false` for the
         // legacy `share_dialog_open` slot in `WarpDriveRow::new_from_cloud_object`.
@@ -2641,7 +2623,7 @@ impl DriveIndex {
         let row_position_id = row_object_id.drive_row_position_id();
         stack.add_child(row.build().finish());
 
-        let row_object_id: CloudObjectTypeAndId = object.cloud_object_type_and_id();
+        let row_object_id: ObjectTypeAndId = object.object_type_and_id();
         if row_object_id.as_folder_id().is_some_and(|folder_id| {
             self.cloud_object_naming_dialog
                 .is_open_for_folder(folder_id)
@@ -2673,21 +2655,21 @@ impl DriveIndex {
 
         // If the item is a folder and the folder is open, render all of the
         // folders children as well.
-        let folder: Option<&CloudFolder> = object.into();
+        let folder: Option<&FolderObject> = object.into();
         if let Some(folder) = folder {
             let mut item_and_children = vec![rendered_item];
 
             if folder.model().is_open {
                 let results = self
                     .sorted_orders_by_location
-                    .get(&CloudObjectLocation::Folder(folder.id))
+                    .get(&StoredObjectLocation::Folder(folder.id))
                     .cloned()
                     .unwrap_or_else(|| {
-                        let cloud_view_model = CloudViewModel::as_ref(app);
+                        let cloud_view_model = ObjectStoreViewModel::as_ref(app);
                         match self.index_variant {
                             DriveIndexVariant::MainIndex => cloud_model
                                 .active_cloud_objects_in_location_without_descendents(
-                                    CloudObjectLocation::Folder(folder.id),
+                                    StoredObjectLocation::Folder(folder.id),
                                     app,
                                 )
                                 .sorted_by(self.sorting_choice.sort_by(
@@ -2697,7 +2679,7 @@ impl DriveIndex {
                                 )),
                             DriveIndexVariant::Trash => cloud_model
                                 .indirectly_trashed_cloud_objects_in_location_without_descendents(
-                                    CloudObjectLocation::Folder(folder.id),
+                                    StoredObjectLocation::Folder(folder.id),
                                     app,
                                 )
                                 .sorted_by(self.sorting_choice.sort_by(
@@ -2738,7 +2720,7 @@ impl DriveIndex {
                 });
             }
 
-            let location = CloudObjectLocation::Folder(folder.id);
+            let location = StoredObjectLocation::Folder(folder.id);
 
             // Since this is a folder, render it as a drop target
             rendered_item = self.render_as_drop_target(
@@ -3082,24 +3064,24 @@ impl DriveIndex {
             }
             // Need to re-render focused index in Warp Drive after a space has been toggled
             if let Some(focused_index) = self.focused_index {
-                self.update_focused_params(focused_index, CloudModel::as_ref(ctx));
+                self.update_focused_params(focused_index, ObjectStoreModel::as_ref(ctx));
             }
         }
     }
 
     fn update_drop_target_location(
         &mut self,
-        new_location: CloudObjectLocation,
+        new_location: StoredObjectLocation,
         ctx: &mut ViewContext<Self>,
     ) {
         // TODO: we need to tell the user why 'move' is not working.
         let is_drop_target_valid = match new_location {
-            CloudObjectLocation::Folder(folder_id) => self.online_only_operation_allowed(
-                &CloudObjectTypeAndId::from_id_and_type(folder_id, ObjectType::Folder),
+            StoredObjectLocation::Folder(folder_id) => self.online_only_operation_allowed(
+                &ObjectTypeAndId::from_id_and_type(folder_id, ObjectType::Folder),
                 ctx,
             ),
-            CloudObjectLocation::Space(_) => self.is_online(ctx),
-            CloudObjectLocation::Trash => self.is_online(ctx),
+            StoredObjectLocation::Space(_) => self.is_online(ctx),
+            StoredObjectLocation::Trash => self.is_online(ctx),
         };
 
         if is_drop_target_valid {
@@ -3110,42 +3092,38 @@ impl DriveIndex {
 
     pub fn move_object_to_team_owner(
         &mut self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
+        object_type_and_id: &ObjectTypeAndId,
         space: Space,
         ctx: &mut ViewContext<Self>,
     ) {
-        self.move_object(
-            cloud_object_type_and_id,
-            CloudObjectLocation::Space(space),
-            ctx,
-        );
+        self.move_object(object_type_and_id, StoredObjectLocation::Space(space), ctx);
     }
 
     fn move_object(
         &mut self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
-        new_location: CloudObjectLocation,
+        object_type_and_id: &ObjectTypeAndId,
+        new_location: StoredObjectLocation,
         ctx: &mut ViewContext<Self>,
     ) {
         self.current_drop_target = None;
         ctx.notify();
 
-        if !self.online_only_operation_allowed(cloud_object_type_and_id, ctx) {
+        if !self.online_only_operation_allowed(object_type_and_id, ctx) {
             return;
         }
 
-        let cloud_model = CloudModel::handle(ctx);
+        let cloud_model = ObjectStoreModel::handle(ctx);
 
         // Only proceed if we can move the object to this location AND the operation results in a change.
         // Even though an object technically can be moved to its current location (can_move_object_to_location returns true)
         // we do not need to do any of the update logic that follows.
         if !cloud_model.as_ref(ctx).can_move_object_to_location(
-            &cloud_object_type_and_id.uid(),
+            &object_type_and_id.uid(),
             new_location,
             ctx,
         ) || cloud_model
             .as_ref(ctx)
-            .object_location(&cloud_object_type_and_id.uid(), ctx)
+            .object_location(&object_type_and_id.uid(), ctx)
             .is_none_or(|location| location == new_location)
         {
             return;
@@ -3153,9 +3131,9 @@ impl DriveIndex {
 
         // Check if object is being moved into team space, if it is, then check
         // corresponding object limits for that team.
-        if let CloudObjectLocation::Space(Space::Team { team_uid }) = new_location {
-            match *cloud_object_type_and_id {
-                CloudObjectTypeAndId::Notebook(_) => {
+        if let StoredObjectLocation::Space(Space::Team { team_uid }) = new_location {
+            match *object_type_and_id {
+                ObjectTypeAndId::Notebook(_) => {
                     if !UserWorkspaces::has_capacity_for_shared_notebooks(team_uid, ctx, 1) {
                         // If team has reached the limit for notebooks, show the modal
                         // and return early.
@@ -3168,7 +3146,7 @@ impl DriveIndex {
                         return;
                     }
                 }
-                CloudObjectTypeAndId::Workflow(_) => {
+                ObjectTypeAndId::Workflow(_) => {
                     if !UserWorkspaces::has_capacity_for_shared_workflows(team_uid, ctx, 1) {
                         // If team has reached the limit for workflows, show the modal
                         // and return early.
@@ -3185,18 +3163,18 @@ impl DriveIndex {
 
         // Otherwise allow object move to go through.
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-            update_manager.move_object_to_location(*cloud_object_type_and_id, new_location, ctx);
+            update_manager.move_object_to_location(*object_type_and_id, new_location, ctx);
         });
 
         match new_location {
-            CloudObjectLocation::Space(space) => self.open_section_of_space(space),
-            CloudObjectLocation::Folder(folder_id) => {
+            StoredObjectLocation::Space(space) => self.open_section_of_space(space),
+            StoredObjectLocation::Folder(folder_id) => {
                 cloud_model.update(ctx, |cloud_model, ctx| {
                     cloud_model.open_folder(folder_id, ctx);
                 });
             }
             // If location is the trash, then the above move_[object]_to_location call already trashed the object
-            CloudObjectLocation::Trash => {}
+            StoredObjectLocation::Trash => {}
         }
 
         self.reset_menus(ctx);
@@ -3361,13 +3339,9 @@ impl DriveIndex {
         }
     }
 
-    fn trash_object(
-        &mut self,
-        cloud_object_type_and_id: CloudObjectTypeAndId,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn trash_object(&mut self, object_type_and_id: ObjectTypeAndId, ctx: &mut ViewContext<Self>) {
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-            update_manager.trash_object(cloud_object_type_and_id, ctx);
+            update_manager.trash_object(object_type_and_id, ctx);
         });
         self.reset_menus(ctx);
         ctx.notify();
@@ -3375,18 +3349,18 @@ impl DriveIndex {
 
     pub fn untrash_object(
         &mut self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
+        object_type_and_id: &ObjectTypeAndId,
         ctx: &mut ViewContext<Self>,
     ) {
         // Check if object being untrashed is in team space, if it is, then check
         // corresponding object limits for that team.
         if let Some(space) =
-            CloudViewModel::as_ref(ctx).object_space(&cloud_object_type_and_id.uid(), ctx)
+            ObjectStoreViewModel::as_ref(ctx).object_space(&object_type_and_id.uid(), ctx)
         {
             match space {
                 Space::Team { team_uid } => {
-                    match cloud_object_type_and_id {
-                        CloudObjectTypeAndId::Notebook(_) => {
+                    match object_type_and_id {
+                        ObjectTypeAndId::Notebook(_) => {
                             if !UserWorkspaces::has_capacity_for_shared_notebooks(team_uid, ctx, 1)
                             {
                                 // If team has reached the limit for notebooks, show the modal
@@ -3400,7 +3374,7 @@ impl DriveIndex {
                                 return;
                             }
                         }
-                        CloudObjectTypeAndId::Workflow(_) => {
+                        ObjectTypeAndId::Workflow(_) => {
                             if !UserWorkspaces::has_capacity_for_shared_workflows(team_uid, ctx, 1)
                             {
                                 // If team has reached the limit for workflows, show the modal
@@ -3412,15 +3386,15 @@ impl DriveIndex {
                                 return;
                             }
                         }
-                        CloudObjectTypeAndId::Folder(folder_id) => {
-                            let cloud_model = CloudModel::handle(ctx);
+                        ObjectTypeAndId::Folder(folder_id) => {
+                            let cloud_model = ObjectStoreModel::handle(ctx);
 
                             // When untrashing a folder, check to see if there are any notebooks or workflows
                             // in the trashed folder and make sure they are within limits.
                             let trashed_object_types = cloud_model
                                 .as_ref(ctx)
                                 .trashed_cloud_object_types_in_location_with_descendants(
-                                    CloudObjectLocation::Folder(*folder_id),
+                                    StoredObjectLocation::Folder(*folder_id),
                                     ctx,
                                 );
                             let notebooks_in_trashed_folder = trashed_object_types
@@ -3468,18 +3442,18 @@ impl DriveIndex {
                         _ => (),
                     }
                 }
-                Space::Personal => match cloud_object_type_and_id {
-                    CloudObjectTypeAndId::Notebook(_) => {
+                Space::Personal => match object_type_and_id {
+                    ObjectTypeAndId::Notebook(_) => {
                         if has_feature_gated_anonymous_user_reached_notebook_limit(ctx) {
                             return;
                         }
                     }
-                    CloudObjectTypeAndId::Workflow(_) => {
+                    ObjectTypeAndId::Workflow(_) => {
                         if has_feature_gated_anonymous_user_reached_workflow_limit(ctx) {
                             return;
                         }
                     }
-                    CloudObjectTypeAndId::GenericStringObject {
+                    ObjectTypeAndId::GenericStringObject {
                         object_type:
                             GenericStringObjectFormat::Json(JsonObjectType::EnvVarCollection),
                         id: _,
@@ -3498,19 +3472,15 @@ impl DriveIndex {
 
         // Otherwise allow object untrash to go through.
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-            update_manager.untrash_object(*cloud_object_type_and_id, ctx);
+            update_manager.untrash_object(*object_type_and_id, ctx);
         });
         self.reset_menus(ctx);
         ctx.notify();
     }
 
-    fn delete_object(
-        &mut self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn delete_object(&mut self, object_type_and_id: &ObjectTypeAndId, ctx: &mut ViewContext<Self>) {
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-            update_manager.delete_object_by_user(*cloud_object_type_and_id, ctx);
+            update_manager.delete_object_by_user(*object_type_and_id, ctx);
         });
         self.reset_menus(ctx);
         ctx.notify();
@@ -3693,7 +3663,7 @@ impl DriveIndex {
     fn render_as_drop_target(
         &self,
         inner_element: Box<dyn Element>,
-        location: CloudObjectLocation,
+        location: StoredObjectLocation,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let drop_target = Container::new(DropTarget::new(inner_element, location).finish());
@@ -3712,11 +3682,11 @@ impl DriveIndex {
 
     fn retry_failed_object(
         &mut self,
-        cloud_object_type_and_id: &CloudObjectTypeAndId,
+        object_type_and_id: &ObjectTypeAndId,
         ctx: &mut ViewContext<Self>,
     ) {
         UpdateManager::handle(ctx).update(ctx, |update_manager, ctx| {
-            update_manager.resync_object(cloud_object_type_and_id, ctx);
+            update_manager.resync_object(object_type_and_id, ctx);
         });
     }
 
@@ -3750,13 +3720,13 @@ impl DriveIndex {
     ) -> Option<Box<dyn Element>> {
         let personal_object_limits = self.auth_state.personal_object_limits()?;
 
-        let num_workflows = CloudModel::as_ref(ctx)
+        let num_workflows = ObjectStoreModel::as_ref(ctx)
             .active_non_welcome_workflows_in_space(Space::Personal, ctx)
             .count();
-        let num_notebooks = CloudModel::as_ref(ctx)
+        let num_notebooks = ObjectStoreModel::as_ref(ctx)
             .active_non_welcome_notebooks_in_space(Space::Personal, ctx)
             .count();
-        let num_env_var_collections = CloudModel::as_ref(ctx)
+        let num_env_var_collections = ObjectStoreModel::as_ref(ctx)
             .active_non_welcome_env_var_collections_in_space(Space::Personal, ctx)
             .count();
 
@@ -4003,7 +3973,6 @@ impl DriveIndex {
     fn render_shared_object_limit_hit_banner(
         &self,
         appearance: &Appearance,
-        team_uid: ServerId,
         object_type: ObjectType,
     ) -> Box<dyn Element> {
         let theme = appearance.theme();
@@ -4045,40 +4014,12 @@ impl DriveIndex {
         .with_margin_bottom(16.)
         .finish();
 
-        let button = appearance
-            .ui_builder()
-            .button(
-                ButtonVariant::Accent,
-                self.mouse_state_handles
-                    .shared_object_limit_hit_banner_button_mouse_state
-                    .clone(),
-            )
-            .with_centered_text_label(crate::t!("drive-compare-plans"))
-            .with_style(UiComponentStyles {
-                font_size: Some(14.),
-                font_weight: Some(Weight::Light),
-                padding: Some(Coords {
-                    top: 8.,
-                    bottom: 8.,
-                    left: 12.,
-                    right: 12.,
-                }),
-                ..Default::default()
-            })
-            .build()
-            .with_cursor(Cursor::PointingHand)
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(DriveIndexAction::ViewPlans { team_uid })
-            })
-            .finish();
-
         Container::new(
             Container::new(
                 Flex::column()
                     .with_main_axis_alignment(MainAxisAlignment::Center)
                     .with_cross_axis_alignment(CrossAxisAlignment::Center)
                     .with_child(body)
-                    .with_child(button)
                     .finish(),
             )
             .with_background(background_color)
@@ -4094,7 +4035,6 @@ impl DriveIndex {
     fn render_payment_issue_banner(
         &self,
         appearance: &Appearance,
-        team_uid: ServerId,
         has_admin_permissions: bool,
         is_on_stripe_paid_plan: bool,
     ) -> Box<dyn Element> {
@@ -4136,37 +4076,6 @@ impl DriveIndex {
             .finish(),
         );
 
-        // Only show a manage billing button if they are an admin and on a paid stripe plan
-        if has_admin_permissions && is_on_stripe_paid_plan {
-            let button = appearance
-                .ui_builder()
-                .button(
-                    ButtonVariant::Accent,
-                    self.mouse_state_handles
-                        .payment_issue_banner_button_mouse_state
-                        .clone(),
-                )
-                .with_centered_text_label(crate::t!("drive-manage-billing"))
-                .with_style(UiComponentStyles {
-                    font_size: Some(14.),
-                    font_weight: Some(Weight::Light),
-                    padding: Some(Coords {
-                        top: 8.,
-                        bottom: 8.,
-                        left: 12.,
-                        right: 12.,
-                    }),
-                    ..Default::default()
-                })
-                .build()
-                .with_cursor(Cursor::PointingHand)
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(DriveIndexAction::ManageBilling { team_uid })
-                })
-                .finish();
-            body.add_child(Container::new(button).with_margin_top(16.).finish());
-        }
-
         Container::new(
             Container::new(body.finish())
                 .with_background(background_color)
@@ -4199,16 +4108,16 @@ impl DriveIndex {
         app: &AppContext,
     ) -> Vec<MenuItem<DriveIndexAction>> {
         let mut menu_items = Vec::new();
-        let WarpDriveItemId::Object(cloud_object_type_and_id) = warp_drive_item_id else {
+        let WarpDriveItemId::Object(object_type_and_id) = warp_drive_item_id else {
             return menu_items;
         };
-        let can_move_or_trash = self.online_only_operation_allowed(cloud_object_type_and_id, app);
-        let cloud_view_model = CloudViewModel::as_ref(app);
-        let access_level = cloud_view_model.access_level(&cloud_object_type_and_id.uid(), app);
-        let editability = cloud_view_model.object_editability(&cloud_object_type_and_id.uid(), app);
-        let object = CloudModel::as_ref(app).get_by_uid(&cloud_object_type_and_id.uid());
+        let can_move_or_trash = self.online_only_operation_allowed(object_type_and_id, app);
+        let cloud_view_model = ObjectStoreViewModel::as_ref(app);
+        let access_level = cloud_view_model.access_level(&object_type_and_id.uid(), app);
+        let editability = cloud_view_model.object_editability(&object_type_and_id.uid(), app);
+        let object = ObjectStoreModel::as_ref(app).get_by_uid(&object_type_and_id.uid());
 
-        if let CloudObjectTypeAndId::Folder(folder_id) = cloud_object_type_and_id {
+        if let ObjectTypeAndId::Folder(folder_id) = object_type_and_id {
             // OpenWarp:本地 folder(ClientId,SyncQueue 上行无 auth no-op)永远拿不到 server_id,
             // 原 `SyncId::ServerId(_) && is_online` 双重门槛会让本地文件夹永远没有"新建子项/Rename"右键菜单。
             // 这里把"本地 folder"视为永远 ready。
@@ -4281,14 +4190,12 @@ impl DriveIndex {
                     if !FeatureFlag::SharedWithMe.is_enabled() || editability.can_edit() {
                         menu_items.push(
                             MenuItemFields::new(crate::t!("drive-rename"))
-                                .with_on_select_action(
-                                    DriveIndexAction::OpenCloudObjectNamingDialog {
-                                        space: *space,
-                                        object_type: DriveObjectType::Folder,
-                                        initial_folder_id: Some(*folder_id),
-                                        cloud_object_type_and_id: Some(*cloud_object_type_and_id),
-                                    },
-                                )
+                                .with_on_select_action(DriveIndexAction::OpenObjectNamingDialog {
+                                    space: *space,
+                                    object_type: DriveObjectType::Folder,
+                                    initial_folder_id: Some(*folder_id),
+                                    object_type_and_id: Some(*object_type_and_id),
+                                })
                                 .with_icon(Icon::Rename)
                                 .into_item(),
                         );
@@ -4307,7 +4214,7 @@ impl DriveIndex {
                         );
                         // TODO(openwarp-cloud-removal Phase 5): `editability` 在此处只剩
                         // 用于决定 share 菜单可见性。share 菜单已删,但 editability 仍是
-                        // CloudObject 权限模型的一部分,保留以待 cloud_object 整体退役。
+                        // StoredObject 权限模型的一部分,保留以待 cloud_object 整体退役。
                         let _ = editability;
                     }
                 }
@@ -4326,7 +4233,7 @@ impl DriveIndex {
                 menu_items.push(
                     MenuItemFields::new(crate::t!("drive-collapse-all"))
                         .with_on_select_action(DriveIndexAction::CollapseAllInLocation(
-                            CloudObjectLocation::Folder(*folder_id),
+                            StoredObjectLocation::Folder(*folder_id),
                         ))
                         .with_icon(Icon::ListCollapsed)
                         .into_item(),
@@ -4343,13 +4250,13 @@ impl DriveIndex {
                     menu_items.push(
                         MenuItemFields::new(crate::t!("drive-retry"))
                             .with_on_select_action(DriveIndexAction::RetryFailedObject(
-                                *cloud_object_type_and_id,
+                                *object_type_and_id,
                             ))
                             .with_icon(Icon::Refresh)
                             .into_item(),
                     );
 
-                    if let Some(server_id) = cloud_object_type_and_id.server_id() {
+                    if let Some(server_id) = object_type_and_id.server_id() {
                         menu_items.push(
                             MenuItemFields::new(crate::t!("drive-revert-to-server"))
                                 .with_on_select_action(DriveIndexAction::RevertFailedObject(
@@ -4361,14 +4268,14 @@ impl DriveIndex {
                     }
                 }
 
-                let workflow: Option<&CloudWorkflow> = object.into();
-                let env_var_collection: Option<&CloudEnvVarCollection> = object.into();
+                let workflow: Option<&WorkflowObject> = object.into();
+                let env_var_collection: Option<&EnvVarCollectionObject> = object.into();
 
-                if self.edit_object_enabled(cloud_object_type_and_id, app) {
+                if self.edit_object_enabled(object_type_and_id, app) {
                     if let Some(notebook) =
-                        <GenericCloudObject<_, CloudNotebookModel> as CloudObject>::as_model_type::<
+                        <GenericStoredObject<_, NotebookObjectModel> as StoredObject>::as_model_type::<
                             _,
-                            CloudNotebookModel,
+                            NotebookObjectModel,
                         >(object)
                     {
                         if let Some(ai_document_id) = notebook.model().ai_document_id {
@@ -4389,7 +4296,7 @@ impl DriveIndex {
                                 !ContextFlag::RunWorkflow.is_enabled(),
                             )
                             .with_on_select_action(DriveIndexAction::OpenWorkflowInPane {
-                                cloud_object_type_and_id: object.cloud_object_type_and_id(),
+                                object_type_and_id: object.object_type_and_id(),
                                 open_mode: if (FeatureFlag::SharedWithMe.is_enabled()
                                     && !editability.can_edit())
                                     || !ContextFlag::RunWorkflow.is_enabled()
@@ -4405,7 +4312,7 @@ impl DriveIndex {
                         menu_items.push(
                             Self::pane_menu_item(editability, false)
                                 .with_on_select_action(DriveIndexAction::OpenObject(
-                                    object.cloud_object_type_and_id(),
+                                    object.object_type_and_id(),
                                 ))
                                 .into_item(),
                         )
@@ -4418,7 +4325,7 @@ impl DriveIndex {
             if let Some(object) = object {
                 match object.object_type() {
                     ObjectType::Workflow => {
-                        let workflow: Option<&CloudWorkflow> = object.into();
+                        let workflow: Option<&WorkflowObject> = object.into();
                         let workflow = workflow.expect("Object is workflow");
                         let label = if workflow.model().data.is_agent_mode_workflow() {
                             crate::t!("drive-copy-prompt")
@@ -4428,7 +4335,7 @@ impl DriveIndex {
                         menu_items.push(
                             MenuItemFields::new(label)
                                 .with_on_select_action(DriveIndexAction::CopyObjectToClipboard(
-                                    *cloud_object_type_and_id,
+                                    *object_type_and_id,
                                 ))
                                 .with_icon(Icon::CopyMenuItem)
                                 .into_item(),
@@ -4437,7 +4344,7 @@ impl DriveIndex {
                             menu_items.push(
                                 MenuItemFields::new(crate::t!("drive-copy-id"))
                                     .with_on_select_action(DriveIndexAction::CopyWorkflowId(
-                                        *cloud_object_type_and_id,
+                                        *object_type_and_id,
                                     ))
                                     .with_icon(Icon::CopyMenuItem)
                                     .into_item(),
@@ -4450,7 +4357,7 @@ impl DriveIndex {
                         menu_items.push(
                             MenuItemFields::new(crate::t!("drive-copy-variables"))
                                 .with_on_select_action(DriveIndexAction::CopyObjectToClipboard(
-                                    *cloud_object_type_and_id,
+                                    *object_type_and_id,
                                 ))
                                 .with_icon(Icon::CopyMenuItem)
                                 .into_item(),
@@ -4459,7 +4366,7 @@ impl DriveIndex {
                             MenuItemFields::new(crate::t!("drive-load-in-subshell"))
                                 .with_on_select_action(
                                     DriveIndexAction::InvokeEnvVarCollectionInSubshell(
-                                        object.cloud_object_type_and_id(),
+                                        object.object_type_and_id(),
                                     ),
                                 )
                                 .with_icon(Icon::Terminal)
@@ -4489,7 +4396,7 @@ impl DriveIndex {
                                             space = space.name(app)
                                         ))
                                         .with_on_select_action(DriveIndexAction::MoveObject {
-                                            cloud_object_type_and_id: *cloud_object_type_and_id,
+                                            object_type_and_id: *object_type_and_id,
                                             new_space: *space,
                                         })
                                         .with_icon(Icon::Move)
@@ -4551,7 +4458,7 @@ impl DriveIndex {
                             menu_items.push(
                                 MenuItemFields::new(crate::t!("drive-duplicate"))
                                     .with_on_select_action(DriveIndexAction::DuplicateObject(
-                                        *cloud_object_type_and_id,
+                                        *object_type_and_id,
                                     ))
                                     .with_icon(Icon::Duplicate)
                                     .into_item(),
@@ -4566,7 +4473,7 @@ impl DriveIndex {
                     menu_items.push(
                         MenuItemFields::new(crate::t!("drive-export"))
                             .with_on_select_action(DriveIndexAction::ExportObject(
-                                *cloud_object_type_and_id,
+                                *object_type_and_id,
                             ))
                             .with_icon(Icon::Download)
                             .into_item(),
@@ -4585,7 +4492,7 @@ impl DriveIndex {
             menu_items.push(
                 MenuItemFields::new(crate::t!("drive-trash-menu"))
                     .with_on_select_action(DriveIndexAction::TrashObject {
-                        cloud_object_type_and_id: *cloud_object_type_and_id,
+                        object_type_and_id: *object_type_and_id,
                     })
                     .with_icon(Icon::Trash)
                     .into_item(),
@@ -4617,27 +4524,27 @@ impl DriveIndex {
         app: &AppContext,
     ) -> Vec<MenuItem<DriveIndexAction>> {
         let mut menu_items = Vec::new();
-        let WarpDriveItemId::Object(cloud_object_type_and_id) = warp_drive_item_id else {
+        let WarpDriveItemId::Object(object_type_and_id) = warp_drive_item_id else {
             return menu_items;
         };
 
         let access_level =
-            CloudViewModel::as_ref(app).access_level(&cloud_object_type_and_id.uid(), app);
-        let cloud_model = CloudModel::as_ref(app);
-        let object = cloud_model.get_by_uid(&cloud_object_type_and_id.uid());
+            ObjectStoreViewModel::as_ref(app).access_level(&object_type_and_id.uid(), app);
+        let cloud_model = ObjectStoreModel::as_ref(app);
+        let object = cloud_model.get_by_uid(&object_type_and_id.uid());
 
         if let Some(object) = object {
             if self.is_online(app) && object.metadata().is_errored() {
                 menu_items.push(
                     MenuItemFields::new(crate::t!("drive-retry"))
                         .with_on_select_action(DriveIndexAction::RetryFailedObject(
-                            *cloud_object_type_and_id,
+                            *object_type_and_id,
                         ))
                         .with_icon(Icon::Refresh)
                         .into_item(),
                 );
 
-                if let Some(server_id) = cloud_object_type_and_id.server_id() {
+                if let Some(server_id) = object_type_and_id.server_id() {
                     menu_items.push(
                         MenuItemFields::new(crate::t!("drive-revert-to-server"))
                             .with_on_select_action(DriveIndexAction::RevertFailedObject(server_id))
@@ -4648,12 +4555,12 @@ impl DriveIndex {
             }
         }
 
-        if self.online_only_operation_allowed(cloud_object_type_and_id, app) {
+        if self.online_only_operation_allowed(object_type_and_id, app) {
             if !FeatureFlag::SharedWithMe.is_enabled() || access_level.can_trash() {
                 menu_items.push(
                     MenuItemFields::new(crate::t!("drive-restore"))
                         .with_on_select_action(DriveIndexAction::UntrashObject {
-                            cloud_object_type_and_id: *cloud_object_type_and_id,
+                            object_type_and_id: *object_type_and_id,
                         })
                         .with_icon(Icon::ReverseLeft)
                         .into_item(),
@@ -4663,7 +4570,7 @@ impl DriveIndex {
                 menu_items.push(
                     MenuItemFields::new(crate::t!("drive-delete-forever"))
                         .with_on_select_action(DriveIndexAction::DeleteObject {
-                            cloud_object_type_and_id: *cloud_object_type_and_id,
+                            object_type_and_id: *object_type_and_id,
                         })
                         .with_icon(Icon::AlertTriangle)
                         .into_item(),
@@ -4698,7 +4605,7 @@ impl DriveIndex {
         });
         let menu_items = vec![MenuItemFields::new(crate::t!("drive-collapse-all"))
             .with_on_select_action(DriveIndexAction::CollapseAllInLocation(
-                CloudObjectLocation::Space(*space),
+                StoredObjectLocation::Space(*space),
             ))
             .with_icon(Icon::ListCollapsed)
             .into_item()];
@@ -4776,17 +4683,17 @@ impl DriveIndex {
                     }
                 }
                 WarpDriveItemId::Object(cloud_id) => match cloud_id {
-                    CloudObjectTypeAndId::Notebook(_) => {
+                    ObjectTypeAndId::Notebook(_) => {
                         if let DriveIndexAction::EnterKey = key {
                             ctx.emit(DriveIndexEvent::OpenObject(*cloud_id))
                         }
                     }
-                    CloudObjectTypeAndId::Workflow(_) => {
+                    ObjectTypeAndId::Workflow(_) => {
                         if let DriveIndexAction::EnterKey = key {
                             if !ContextFlag::RunWorkflow.is_enabled() {
                                 // if on the web open in view mode by default
                                 ctx.emit(DriveIndexEvent::OpenWorkflowInPane {
-                                    cloud_object_type_and_id: *cloud_id,
+                                    object_type_and_id: *cloud_id,
                                     open_mode: WorkflowViewMode::View,
                                 })
                             } else {
@@ -4794,8 +4701,8 @@ impl DriveIndex {
                             }
                         }
                     }
-                    CloudObjectTypeAndId::Folder(id) => {
-                        CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| match key {
+                    ObjectTypeAndId::Folder(id) => {
+                        ObjectStoreModel::handle(ctx).update(ctx, |cloud_model, ctx| match key {
                             DriveIndexAction::EnterKey => {
                                 cloud_model.toggle_folder_open(*id, ctx);
                             }
@@ -4804,7 +4711,7 @@ impl DriveIndex {
                             _ => {}
                         });
                     }
-                    CloudObjectTypeAndId::GenericStringObject { object_type, id: _ } => {
+                    ObjectTypeAndId::GenericStringObject { object_type, id: _ } => {
                         if let GenericStringObjectFormat::Json(JsonObjectType::EnvVarCollection) =
                             object_type
                         {
@@ -4954,7 +4861,6 @@ impl View for DriveIndex {
                 let is_on_stripe_paid_plan = team.billing_metadata.is_on_stripe_paid_plan();
                 drive.add_child(self.render_payment_issue_banner(
                     appearance,
-                    team.uid,
                     has_admin_permissions,
                     is_on_stripe_paid_plan,
                 ));
@@ -4963,21 +4869,17 @@ impl View for DriveIndex {
                 ObjectType::Workflow,
                 app,
             ) {
-                drive.add_child(self.render_shared_object_limit_hit_banner(
-                    appearance,
-                    team.uid,
-                    ObjectType::Workflow,
-                ));
+                drive.add_child(
+                    self.render_shared_object_limit_hit_banner(appearance, ObjectType::Workflow),
+                );
             } else if UserWorkspaces::is_at_tier_limit_for_object_type(
                 team.uid,
                 ObjectType::Notebook,
                 app,
             ) {
-                drive.add_child(self.render_shared_object_limit_hit_banner(
-                    appearance,
-                    team.uid,
-                    ObjectType::Notebook,
-                ));
+                drive.add_child(
+                    self.render_shared_object_limit_hit_banner(appearance, ObjectType::Notebook),
+                );
             }
         }
 
@@ -5047,33 +4949,33 @@ impl TypedActionView for DriveIndex {
             DriveIndexAction::OpenMCPServerCollection => {
                 ctx.emit(DriveIndexEvent::OpenMCPServerCollection);
             }
-            DriveIndexAction::OpenObject(cloud_object_type_and_id) => {
+            DriveIndexAction::OpenObject(object_type_and_id) => {
                 if !matches!(self.index_variant, DriveIndexVariant::Trash) {
                     self.set_selected_object(
-                        Some(WarpDriveItemId::Object(*cloud_object_type_and_id)),
+                        Some(WarpDriveItemId::Object(*object_type_and_id)),
                         ctx,
                     );
-                    ctx.emit(DriveIndexEvent::OpenObject(*cloud_object_type_and_id))
+                    ctx.emit(DriveIndexEvent::OpenObject(*object_type_and_id))
                 }
             }
             DriveIndexAction::OpenWorkflowInPane {
-                cloud_object_type_and_id,
+                object_type_and_id,
                 open_mode,
             } => {
                 if !matches!(self.index_variant, DriveIndexVariant::Trash) {
                     self.set_selected_object(
-                        Some(WarpDriveItemId::Object(*cloud_object_type_and_id)),
+                        Some(WarpDriveItemId::Object(*object_type_and_id)),
                         ctx,
                     );
                     ctx.emit(DriveIndexEvent::OpenWorkflowInPane {
-                        cloud_object_type_and_id: *cloud_object_type_and_id,
+                        object_type_and_id: *object_type_and_id,
                         open_mode: *open_mode,
                     });
                 }
             }
-            DriveIndexAction::CopyObjectToClipboard(cloud_object_type_and_id) => {
+            DriveIndexAction::CopyObjectToClipboard(object_type_and_id) => {
                 send_telemetry_from_ctx!(
-                    TelemetryEvent::CopyObjectToClipboard(cloud_object_type_and_id.into()),
+                    TelemetryEvent::CopyObjectToClipboard(object_type_and_id.into()),
                     ctx
                 );
 
@@ -5083,13 +4985,13 @@ impl TypedActionView for DriveIndex {
                     })
                     .unwrap_or_else(|| OperatingSystem::get().default_shell_family());
 
-                let cloud_model = CloudModel::as_ref(ctx);
-                let object = cloud_model.get_by_uid(&cloud_object_type_and_id.uid());
+                let cloud_model = ObjectStoreModel::as_ref(ctx);
+                let object = cloud_model.get_by_uid(&object_type_and_id.uid());
 
                 if let Some(object) = object {
                     match object.object_type() {
                         ObjectType::Workflow => {
-                            let workflow: Option<&CloudWorkflow> = object.into();
+                            let workflow: Option<&WorkflowObject> = object.into();
                             if let Some(workflow) = workflow {
                                 let content = workflow.model().data.content().to_owned();
                                 ctx.clipboard().write(ClipboardContent::plain_text(content));
@@ -5098,7 +5000,7 @@ impl TypedActionView for DriveIndex {
                         ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
                             JsonObjectType::EnvVarCollection,
                         )) => {
-                            let env_var_collection: Option<&CloudEnvVarCollection> = object.into();
+                            let env_var_collection: Option<&EnvVarCollectionObject> = object.into();
                             if let Some(env_var_collection) = env_var_collection {
                                 let vars = env_var_collection
                                     .model()
@@ -5113,17 +5015,17 @@ impl TypedActionView for DriveIndex {
                     }
                 }
             }
-            DriveIndexAction::CopyWorkflowId(cloud_object_type_and_id) => {
-                let workflow_id = cloud_object_type_and_id.uid();
+            DriveIndexAction::CopyWorkflowId(object_type_and_id) => {
+                let workflow_id = object_type_and_id.uid();
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(workflow_id));
             }
-            DriveIndexAction::DuplicateObject(cloud_object_type_and_id) => {
+            DriveIndexAction::DuplicateObject(object_type_and_id) => {
                 send_telemetry_from_ctx!(
-                    TelemetryEvent::DuplicateObject(cloud_object_type_and_id.into()),
+                    TelemetryEvent::DuplicateObject(object_type_and_id.into()),
                     ctx
                 );
-                ctx.emit(DriveIndexEvent::DuplicateObject(*cloud_object_type_and_id));
+                ctx.emit(DriveIndexEvent::DuplicateObject(*object_type_and_id));
             }
             DriveIndexAction::ExportObject(type_and_id) => {
                 send_telemetry_from_ctx!(TelemetryEvent::ExportObject(type_and_id.into()), ctx);
@@ -5144,29 +5046,29 @@ impl TypedActionView for DriveIndex {
             DriveIndexAction::ToggleSpaceOverflowMenu { space, offset } => {
                 self.toggle_space_menu(space, *offset, ctx);
             }
-            DriveIndexAction::OpenCloudObjectNamingDialog {
+            DriveIndexAction::OpenObjectNamingDialog {
                 object_type,
                 space,
                 initial_folder_id,
-                cloud_object_type_and_id,
+                object_type_and_id,
             } => {
                 self.reset_menus(ctx);
 
                 // If attempting to rename a folder, we can start with the existing name.
-                let existing_name = cloud_object_type_and_id.and_then(|id| {
-                    let model: &CloudModel = CloudModel::as_ref(ctx);
+                let existing_name = object_type_and_id.and_then(|id| {
+                    let model: &ObjectStoreModel = ObjectStoreModel::as_ref(ctx);
                     match id {
-                        CloudObjectTypeAndId::Folder(folder_id) => {
+                        ObjectTypeAndId::Folder(folder_id) => {
                             model.get_folder(&folder_id).map(|f| f.model().name.clone())
                         }
-                        CloudObjectTypeAndId::Notebook(notebook_id) => model
+                        ObjectTypeAndId::Notebook(notebook_id) => model
                             .get_notebook(&notebook_id)
                             .map(|n| n.model().title.clone()),
                         _ => None,
                     }
                 });
 
-                let is_rename = cloud_object_type_and_id.is_some();
+                let is_rename = object_type_and_id.is_some();
                 match *object_type {
                     DriveObjectType::Notebook { .. } | DriveObjectType::Folder => {
                         self.cloud_object_naming_dialog.open(
@@ -5201,23 +5103,23 @@ impl TypedActionView for DriveIndex {
 
                 ctx.notify();
             }
-            DriveIndexAction::CloseCloudObjectNamingDialog => {
+            DriveIndexAction::CloseObjectNamingDialog => {
                 self.cloud_object_naming_dialog.close(ctx);
                 ctx.notify();
             }
             DriveIndexAction::MoveObject {
-                cloud_object_type_and_id,
+                object_type_and_id,
                 new_space,
             } => self.move_object(
-                cloud_object_type_and_id,
-                CloudObjectLocation::Space(*new_space),
+                object_type_and_id,
+                StoredObjectLocation::Space(*new_space),
                 ctx,
             ),
             DriveIndexAction::DropIndexItem {
-                cloud_object_type_and_id,
+                object_type_and_id,
                 drop_target_location,
             } => {
-                self.move_object(cloud_object_type_and_id, *drop_target_location, ctx);
+                self.move_object(object_type_and_id, *drop_target_location, ctx);
             }
             DriveIndexAction::UpdateCurrentDropTarget {
                 drop_target_location,
@@ -5243,8 +5145,8 @@ impl TypedActionView for DriveIndex {
                 space: *space,
                 initial_folder_id: *initial_folder_id,
             }),
-            DriveIndexAction::OpenWorkflowModalWithCloudWorkflow(workflow_id) => {
-                ctx.emit(DriveIndexEvent::OpenWorkflowModalWithCloudWorkflow(
+            DriveIndexAction::OpenWorkflowModalWithWorkflowObject(workflow_id) => {
+                ctx.emit(DriveIndexEvent::OpenWorkflowModalWithWorkflowObject(
                     *workflow_id,
                 ));
             }
@@ -5252,34 +5154,28 @@ impl TypedActionView for DriveIndex {
                 // If WD is focused, then clicking a folder will set that folder to be focused
                 if self.focused_index.is_some() {
                     self.set_focused_item(
-                        WarpDriveItemId::Object(CloudObjectTypeAndId::Folder(*id)),
+                        WarpDriveItemId::Object(ObjectTypeAndId::Folder(*id)),
                         true,
                         ctx,
                     );
                 }
-                CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
+                ObjectStoreModel::handle(ctx).update(ctx, |cloud_model, ctx| {
                     cloud_model.toggle_folder_open(*id, ctx);
                 });
             }
             DriveIndexAction::CollapseAllInLocation(location) => {
-                CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
+                ObjectStoreModel::handle(ctx).update(ctx, |cloud_model, ctx| {
                     cloud_model.collapse_all_in_location(*location, self.index_variant, ctx);
                 });
             }
-            DriveIndexAction::TrashObject {
-                cloud_object_type_and_id,
-            } => {
-                self.trash_object(*cloud_object_type_and_id, ctx);
+            DriveIndexAction::TrashObject { object_type_and_id } => {
+                self.trash_object(*object_type_and_id, ctx);
             }
-            DriveIndexAction::UntrashObject {
-                cloud_object_type_and_id,
-            } => {
-                self.untrash_object(cloud_object_type_and_id, ctx);
+            DriveIndexAction::UntrashObject { object_type_and_id } => {
+                self.untrash_object(object_type_and_id, ctx);
             }
-            DriveIndexAction::DeleteObject {
-                cloud_object_type_and_id,
-            } => {
-                self.delete_object(cloud_object_type_and_id, ctx);
+            DriveIndexAction::DeleteObject { object_type_and_id } => {
+                self.delete_object(object_type_and_id, ctx);
             }
             DriveIndexAction::EmptyTrash { space } => {
                 self.empty_trash(space, ctx);
@@ -5295,8 +5191,8 @@ impl TypedActionView for DriveIndex {
             DriveIndexAction::UpdateSortingChoice { sorting_choice } => {
                 self.update_sorting_choice(sorting_choice, ctx);
             }
-            DriveIndexAction::RetryFailedObject(cloud_object_type_and_id) => {
-                self.retry_failed_object(cloud_object_type_and_id, ctx);
+            DriveIndexAction::RetryFailedObject(object_type_and_id) => {
+                self.retry_failed_object(object_type_and_id, ctx);
             }
             DriveIndexAction::RetryAllFailedObjects => {
                 self.retry_all_failed(ctx);
@@ -5382,26 +5278,14 @@ impl TypedActionView for DriveIndex {
             DriveIndexAction::InvokeEnvVarCollectionInSubshell(id) => {
                 ctx.emit(DriveIndexEvent::InvokeEnvVarCollectionInSubshell(*id))
             }
-            DriveIndexAction::ViewPlans { team_uid } => {
-                ctx.open_url(UserWorkspaces::upgrade_link_for_team(*team_uid).as_str());
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::SharedObjectLimitHitBannerViewPlansButtonClicked,
-                    ctx
-                );
-            }
-            DriveIndexAction::ManageBilling { team_uid } => {
-                UserWorkspaces::handle(ctx).update(ctx, move |user_workspaces, ctx| {
-                    user_workspaces.generate_stripe_billing_portal_link(*team_uid, ctx);
-                });
-            }
             // 去中心化分支:`DriveIndexAction::SignupAnonymousUser` 已 noop。
             DriveIndexAction::SignupAnonymousUser => {}
             DriveIndexAction::DismissPersonalObjectLimits => {
                 self.dismiss_personal_object_limit_status(ctx);
             }
             DriveIndexAction::SetCurrentWorkspace(workspace_uid) => {
-                TeamUpdateManager::handle(ctx).update(ctx, |manager, ctx| {
-                    manager.set_current_workspace_uid(*workspace_uid, ctx)
+                UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
+                    user_workspaces.set_current_workspace_uid(*workspace_uid, ctx)
                 });
             }
             DriveIndexAction::AttachPlanAsContext(id) => {

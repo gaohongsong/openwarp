@@ -1,17 +1,18 @@
 use crate::ai::agent::{SuggestedAgentModeWorkflow, SuggestedLoggingId, SuggestedRule};
-use crate::ai::facts::CloudAIFactModel;
+use crate::ai::facts::AIFactObjectModel;
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
-use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
-use crate::drive::CloudObjectTypeAndId;
-use crate::server::cloud_objects::update_manager::{
+use crate::cloud_object::model::persistence::{ObjectStoreEvent, ObjectStoreModel};
+use crate::cloud_object::update_manager::{
     ObjectOperation, OperationSuccessType, UpdateManagerEvent,
 };
+use crate::drive::ObjectTypeAndId;
 use crate::server::ids::SyncId;
 use crate::view_components::action_button::{ActionButton, ActionButtonTheme, SecondaryTheme};
 use crate::TelemetryEvent;
 use crate::{
     ai::facts::{AIFact, AIMemory},
-    server::{cloud_objects::update_manager::UpdateManager, ids::ClientId},
+    cloud_object::update_manager::UpdateManager,
+    server::ids::ClientId,
     ui_components::{blended_colors, icons::Icon},
 };
 use pathfinder_color::ColorU;
@@ -261,9 +262,9 @@ impl SuggestionChipView {
             me.handle_update_manager_event(event, ctx);
         });
 
-        let cloud_model = CloudModel::handle(ctx);
+        let cloud_model = ObjectStoreModel::handle(ctx);
         ctx.subscribe_to_model(&cloud_model, |me, _, event, ctx| {
-            me.handle_cloud_model_event(event, ctx);
+            me.handle_object_store_event(event, ctx);
         });
     }
 
@@ -298,22 +299,22 @@ impl SuggestionChipView {
         }
     }
 
-    fn handle_cloud_model_event(&mut self, event: &CloudModelEvent, ctx: &mut ViewContext<Self>) {
+    fn handle_object_store_event(&mut self, event: &ObjectStoreEvent, ctx: &mut ViewContext<Self>) {
         match event {
-            CloudModelEvent::ObjectUpdated {
-                type_and_id: CloudObjectTypeAndId::GenericStringObject { id, .. },
+            ObjectStoreEvent::ObjectUpdated {
+                type_and_id: ObjectTypeAndId::GenericStringObject { id, .. },
                 ..
             } => {
                 if self.sync_id.into_client() == id.into_client() {
                     self.load_suggestion(ctx);
                 }
             }
-            CloudModelEvent::ObjectTrashed {
-                type_and_id: CloudObjectTypeAndId::GenericStringObject { id, .. },
+            ObjectStoreEvent::ObjectTrashed {
+                type_and_id: ObjectTypeAndId::GenericStringObject { id, .. },
                 ..
             }
-            | CloudModelEvent::ObjectDeleted {
-                type_and_id: CloudObjectTypeAndId::GenericStringObject { id, .. },
+            | ObjectStoreEvent::ObjectDeleted {
+                type_and_id: ObjectTypeAndId::GenericStringObject { id, .. },
                 ..
             } => {
                 // If the rule or workflow has been deleted, then we should reset it such that
@@ -345,14 +346,14 @@ impl SuggestionChipView {
 
     /// Fetches the rule from the cloud model, and updates the UI to reflect that.
     fn load_suggestion(&mut self, ctx: &mut ViewContext<Self>) {
-        let cloud_model = CloudModel::handle(ctx);
+        let cloud_model = ObjectStoreModel::handle(ctx);
         let tooltip = self.suggestion.tooltip();
 
         match &mut self.suggestion {
             Suggestion::Rule { .. } => {
                 if let Some(rule) = cloud_model
                     .as_ref(ctx)
-                    .get_object_of_type::<GenericStringObjectId, CloudAIFactModel>(&self.sync_id)
+                    .get_object_of_type::<GenericStringObjectId, AIFactObjectModel>(&self.sync_id)
                 {
                     let AIFact::Memory(AIMemory { content, .. }) =
                         rule.model().string_model.clone();
@@ -417,8 +418,8 @@ impl TypedActionView for SuggestionChipView {
         match action {
             SuggestedViewAction::ChipClicked => match &self.suggestion {
                 Suggestion::Rule { rule, .. } => {
-                    if CloudModel::as_ref(ctx)
-                        .get_object_of_type::<GenericStringObjectId, CloudAIFactModel>(
+                    if ObjectStoreModel::as_ref(ctx)
+                        .get_object_of_type::<GenericStringObjectId, AIFactObjectModel>(
                             &self.sync_id,
                         )
                         .is_some()
@@ -439,7 +440,7 @@ impl TypedActionView for SuggestionChipView {
                     }
                 }
                 Suggestion::AgentModeWorkflow { workflow, .. } => {
-                    if CloudModel::as_ref(ctx)
+                    if ObjectStoreModel::as_ref(ctx)
                         .get_workflow(&self.sync_id)
                         .is_some()
                     {

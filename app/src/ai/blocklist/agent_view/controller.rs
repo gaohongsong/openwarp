@@ -37,7 +37,7 @@ pub enum ExitAgentViewError {
     LongRunningCommand,
     #[error("Cannot exit conversation as a viewer.")]
     ConversationViewer,
-    #[error("Cannot exit cloud agent.")]
+    #[error("Cannot exit agent.")]
     AmbientAgent,
 }
 
@@ -131,9 +131,9 @@ pub enum AgentViewEntryOrigin {
     AcceptedPassiveCodeDiff,
     /// Entered agent view by starting conversation with an inline code review submission.
     InlineCodeReview,
-    /// Entered agent view through a cloud agent prompt.
+    /// Entered agent view through an ambient agent prompt.
     CloudAgent,
-    /// Entered agent view by opening an existing non-Oz cloud agent run (live shared-session
+    /// Entered agent view by opening an existing non-Oz ambient agent run (live shared-session
     /// viewer or transcript viewer).
     ThirdPartyCloudAgent,
     /// Entered agent view via the CLI (e.g. `warp agent run`).
@@ -145,7 +145,6 @@ pub enum AgentViewEntryOrigin {
         trigger: SlashCommandTrigger,
     },
     SlashInit,
-    CreateEnvironment,
     /// Entered agent view by executing a slash command that requires agent mode.
     Keybinding,
     /// Entered agent view by attaching context from the code review panel.
@@ -803,17 +802,8 @@ impl AgentViewController {
             .set_agent_view_state(self.agent_view_state.clone());
 
         if origin == AgentViewEntryOrigin::CloudAgent {
-            // Only enter setup state if there are no existing environments.
-            // If environments exist, the user should go directly to composing.
-            let has_environments =
-                !crate::ai::cloud_environments::CloudAmbientAgentEnvironment::get_all(ctx)
-                    .is_empty();
             self.ambient_agent_view_model.update(ctx, |model, ctx| {
-                if has_environments {
-                    model.enter_composing_from_setup(ctx);
-                } else {
-                    model.enter_setup(ctx);
-                }
+                model.enter_composing_from_setup(ctx);
             });
         }
 

@@ -19,7 +19,7 @@ use warpui::{
 
 use crate::{
     appearance::Appearance,
-    cloud_object::{model::persistence::CloudModel, CloudObject},
+    cloud_object::{model::persistence::ObjectStoreModel, StoredObject},
     completer::SessionAgnosticContext,
     notebooks::{
         styles::block_footer_action_button,
@@ -31,7 +31,7 @@ use crate::{
     themes::theme::AnsiColorIdentifier,
     ui_components::icons::Icon,
     util::bindings::CustomAction,
-    workflows::{CloudWorkflow, WorkflowId},
+    workflows::{WorkflowId, WorkflowObject},
 };
 
 use super::{
@@ -177,15 +177,15 @@ impl NotebookEmbed {
         self.highlight_syntax(ctx);
     }
 
-    fn maybe_get_workflow<'a>(&self, ctx: &'a AppContext) -> Option<&'a CloudWorkflow> {
-        let cloud_model = CloudModel::as_ref(ctx);
+    fn maybe_get_workflow<'a>(&self, ctx: &'a AppContext) -> Option<&'a WorkflowObject> {
+        let cloud_model = ObjectStoreModel::as_ref(ctx);
 
         // Currently we are only supporting embedded workflows. We could support
         // more drive objects in the future.
         let id = WorkflowId::from_hash(&self.hashed_id)?;
         cloud_model
             .get_by_uid(&id.to_server_id().uid())
-            .and_then(|object| object.as_any().downcast_ref::<CloudWorkflow>())
+            .and_then(|object| object.as_any().downcast_ref::<WorkflowObject>())
             .and_then(|workflow| {
                 if workflow.is_trashed(cloud_model) {
                     None
@@ -205,7 +205,7 @@ impl NotebookEmbed {
 
     fn render_footer_for_workflow(
         &self,
-        workflow: &CloudWorkflow,
+        workflow: &WorkflowObject,
         appearance: &Appearance,
         ctx: &AppContext,
     ) -> Box<dyn Element> {
