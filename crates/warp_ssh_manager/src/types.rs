@@ -73,6 +73,20 @@ pub struct SshServerInfo {
     /// auth_type=Key 时使用,绝对路径或 `~` 开头(由调用方 `shellexpand`)。
     pub key_path: Option<String>,
     pub last_connected_at: Option<NaiveDateTime>,
+    /// SSH ProxyJump (-J / -o ProxyJump=…)。
+    pub proxy_jump: Option<String>,
+    /// SSH ConnectTimeout 秒数。
+    pub connect_timeout_secs: Option<u32>,
+    /// SSH ServerAliveInterval 秒数。
+    pub keepalive_interval_secs: Option<u32>,
+    /// SSH ServerAliveCountMax 次数。
+    pub keepalive_count_max: Option<u32>,
+    /// 来源标识:"manual" 或 "ssh_config"。
+    pub source: Option<String>,
+    /// SSH HostKeyAlgorithms, e.g. "+ssh-rsa"。
+    pub host_key_algorithms: Option<String>,
+    /// SSH PubkeyAcceptedKeyTypes, e.g. "+ssh-rsa"。
+    pub pubkey_accepted_key_types: Option<String>,
 }
 
 impl SshServerInfo {
@@ -85,6 +99,13 @@ impl SshServerInfo {
             auth_type: AuthType::Password,
             key_path: None,
             last_connected_at: None,
+            proxy_jump: None,
+            connect_timeout_secs: None,
+            keepalive_interval_secs: None,
+            keepalive_count_max: None,
+            source: None,
+            host_key_algorithms: None,
+            pubkey_accepted_key_types: None,
         }
     }
 }

@@ -1415,6 +1415,13 @@ pub struct SshServerRow {
     pub auth_type: String,
     pub key_path: Option<String>,
     pub last_connected_at: Option<NaiveDateTime>,
+    pub proxy_jump: Option<String>,
+    pub connect_timeout_secs: Option<i32>,
+    pub keepalive_interval_secs: Option<i32>,
+    pub keepalive_count_max: Option<i32>,
+    pub source: Option<String>,
+    pub host_key_algorithms: Option<String>,
+    pub pubkey_accepted_key_types: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset, Clone, Debug)]
@@ -1426,4 +1433,11 @@ pub struct NewSshServer<'a> {
     pub username: &'a str,
     pub auth_type: &'a str,
     pub key_path: Option<&'a str>,
+    pub proxy_jump: Option<&'a str>,
+    pub connect_timeout_secs: Option<i32>,
+    pub keepalive_interval_secs: Option<i32>,
+    pub keepalive_count_max: Option<i32>,
+    pub source: Option<&'a str>,
+    pub host_key_algorithms: Option<&'a str>,
+    pub pubkey_accepted_key_types: Option<&'a str>,
 }

@@ -91,6 +91,13 @@ impl SshRepository {
                     username: &info.username,
                     auth_type: info.auth_type.as_db_str(),
                     key_path: info.key_path.as_deref(),
+                    proxy_jump: info.proxy_jump.as_deref(),
+                    connect_timeout_secs: info.connect_timeout_secs.map(|v| v as i32),
+                    keepalive_interval_secs: info.keepalive_interval_secs.map(|v| v as i32),
+                    keepalive_count_max: info.keepalive_count_max.map(|v| v as i32),
+                    source: info.source.as_deref(),
+                    host_key_algorithms: info.host_key_algorithms.as_deref(),
+                    pubkey_accepted_key_types: info.pubkey_accepted_key_types.as_deref(),
                 })
                 .execute(conn)?;
             Ok(())
@@ -126,6 +133,13 @@ impl SshRepository {
                 ssh_servers::username.eq(&info.username),
                 ssh_servers::auth_type.eq(info.auth_type.as_db_str()),
                 ssh_servers::key_path.eq(info.key_path.as_deref()),
+                ssh_servers::proxy_jump.eq(info.proxy_jump.as_deref()),
+                ssh_servers::connect_timeout_secs.eq(info.connect_timeout_secs.map(|v| v as i32)),
+                ssh_servers::keepalive_interval_secs.eq(info.keepalive_interval_secs.map(|v| v as i32)),
+                ssh_servers::keepalive_count_max.eq(info.keepalive_count_max.map(|v| v as i32)),
+                ssh_servers::source.eq(info.source.as_deref()),
+                ssh_servers::host_key_algorithms.eq(info.host_key_algorithms.as_deref()),
+                ssh_servers::pubkey_accepted_key_types.eq(info.pubkey_accepted_key_types.as_deref()),
             ))
             .execute(conn)?;
         if n == 0 {
@@ -213,6 +227,59 @@ impl SshRepository {
         Ok(())
     }
 
+    /// 批量创建 server 节点 — 用于 ssh config 导入。每项为 (显示名, SshServerInfo)，
+    /// 全部放在 `parent_id` 文件夹下(可为 None = root)。事务内执行,失败全部回滚。
+    pub fn create_servers_batch(
+        conn: &mut SqliteConnection,
+        parent_id: Option<&str>,
+        items: &[(String, SshServerInfo)],
+    ) -> Result<Vec<SshNode>, SshRepositoryError> {
+        let nodes = conn.transaction::<_, DieselError, _>(|conn| {
+            let mut nodes = Vec::with_capacity(items.len());
+            let mut sort = next_sort_order(conn, parent_id).map_err(|e| match e {
+                SshRepositoryError::Db(d) => d,
+                _ => DieselError::NotFound,
+            })?;
+            for (name, info) in items {
+                let id = new_uuid();
+                diesel::insert_into(ssh_nodes::table)
+                    .values(NewSshNode {
+                        id: &id,
+                        parent_id,
+                        kind: NodeKind::Server.as_db_str(),
+                        name,
+                        sort_order: sort,
+                    })
+                    .execute(conn)?;
+                diesel::insert_into(ssh_servers::table)
+                    .values(NewSshServer {
+                        node_id: &id,
+                        host: &info.host,
+                        port: info.port as i32,
+                        username: &info.username,
+                        auth_type: info.auth_type.as_db_str(),
+                        key_path: info.key_path.as_deref(),
+                        proxy_jump: info.proxy_jump.as_deref(),
+                        connect_timeout_secs: info.connect_timeout_secs.map(|v| v as i32),
+                        keepalive_interval_secs: info.keepalive_interval_secs.map(|v| v as i32),
+                        keepalive_count_max: info.keepalive_count_max.map(|v| v as i32),
+                        source: info.source.as_deref(),
+                        host_key_algorithms: info.host_key_algorithms.as_deref(),
+                        pubkey_accepted_key_types: info.pubkey_accepted_key_types.as_deref(),
+                    })
+                    .execute(conn)?;
+                let node = Self::get_node(conn, &id).map_err(|e| match e {
+                    SshRepositoryError::Db(d) => d,
+                    other => DieselError::NotFound, // 不该发生;事务会回滚
+                })?;
+                nodes.push(node);
+                sort += 1;
+            }
+            Ok(nodes)
+        })?;
+        Ok(nodes)
+    }
+
     fn get_node(conn: &mut SqliteConnection, node_id: &str) -> Result<SshNode, SshRepositoryError> {
         let row: SshNodeRow = ssh_nodes::table
             .find(node_id)
@@ -276,6 +343,13 @@ fn server_from_row(r: SshServerRow) -> Result<SshServerInfo, SshRepositoryError>
         auth_type: auth,
         key_path: r.key_path,
         last_connected_at: r.last_connected_at,
+        proxy_jump: r.proxy_jump,
+        connect_timeout_secs: r.connect_timeout_secs.map(|v| v as u32),
+        keepalive_interval_secs: r.keepalive_interval_secs.map(|v| v as u32),
+        keepalive_count_max: r.keepalive_count_max.map(|v| v as u32),
+        source: r.source,
+        host_key_algorithms: r.host_key_algorithms,
+        pubkey_accepted_key_types: r.pubkey_accepted_key_types,
     })
 }
 
@@ -292,6 +366,12 @@ pub(crate) fn setup_in_memory() -> SqliteConnection {
         ),
         include_str!(
             "../../persistence/migrations/2026-05-04-130000_add_ssh_nodes_is_collapsed/up.sql"
+        ),
+        include_str!(
+            "../../persistence/migrations/2026-05-14-100000_add_ssh_server_advanced_fields/up.sql"
+        ),
+        include_str!(
+            "../../persistence/migrations/2026-05-14-110000_add_ssh_server_algorithm_fields/up.sql"
         ),
     ] {
         conn.batch_execute(up).unwrap();
@@ -312,6 +392,13 @@ mod tests {
             auth_type: AuthType::Password,
             key_path: None,
             last_connected_at: None,
+            proxy_jump: None,
+            connect_timeout_secs: None,
+            keepalive_interval_secs: None,
+            keepalive_count_max: None,
+            source: None,
+            host_key_algorithms: None,
+            pubkey_accepted_key_types: None,
         }
     }
 
@@ -425,5 +512,66 @@ mod tests {
         let mut conn = setup_in_memory();
         let err = SshRepository::delete_node(&mut conn, "nope").unwrap_err();
         assert!(matches!(err, SshRepositoryError::NotFound(_)));
+    }
+
+    #[test]
+    fn update_server_with_advanced_fields() {
+        let mut conn = setup_in_memory();
+        let s =
+            SshRepository::create_server(&mut conn, None, "srv", &sample_server("srv")).unwrap();
+        let mut info = SshRepository::get_server(&mut conn, &s.id)
+            .unwrap()
+            .unwrap();
+        info.proxy_jump = Some("bastion".into());
+        info.connect_timeout_secs = Some(30);
+        info.keepalive_interval_secs = Some(60);
+        info.keepalive_count_max = Some(3);
+        info.source = Some("ssh_config".into());
+        SshRepository::update_server(&mut conn, &info).unwrap();
+
+        let got = SshRepository::get_server(&mut conn, &s.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(got.proxy_jump.as_deref(), Some("bastion"));
+        assert_eq!(got.connect_timeout_secs, Some(30));
+        assert_eq!(got.keepalive_interval_secs, Some(60));
+        assert_eq!(got.keepalive_count_max, Some(3));
+        assert_eq!(got.source.as_deref(), Some("ssh_config"));
+    }
+
+    #[test]
+    fn create_servers_batch() {
+        let mut conn = setup_in_memory();
+        let folder = SshRepository::create_folder(&mut conn, None, "Imported").unwrap();
+        let items: Vec<(String, SshServerInfo)> = vec![
+            ("host-a".into(), {
+                let mut s = sample_server("a");
+                s.host = "a.example.com".into();
+                s.source = Some("ssh_config".into());
+                s
+            }),
+            ("host-b".into(), {
+                let mut s = sample_server("b");
+                s.host = "b.example.com".into();
+                s.proxy_jump = Some("bastion".into());
+                s
+            }),
+        ];
+        let nodes = SshRepository::create_servers_batch(&mut conn, Some(&folder.id), &items)
+            .unwrap();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes[0].name, "host-a");
+        assert_eq!(nodes[1].name, "host-b");
+
+        let srv_a = SshRepository::get_server(&mut conn, &nodes[0].id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(srv_a.host, "a.example.com");
+        assert_eq!(srv_a.source.as_deref(), Some("ssh_config"));
+
+        let srv_b = SshRepository::get_server(&mut conn, &nodes[1].id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(srv_b.proxy_jump.as_deref(), Some("bastion"));
     }
 }

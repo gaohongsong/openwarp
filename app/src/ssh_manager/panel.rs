@@ -25,8 +25,12 @@ use warpui::elements::{
 use warpui::platform::Cursor;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{
-    AppContext, Entity, FocusContext, SingletonEntity, TypedActionView, View, ViewContext,
-    ViewHandle,
+    presenter::ChildView, AppContext, Entity, FocusContext, SingletonEntity, TypedActionView, View,
+    ViewContext, ViewHandle,
+};
+
+use crate::ssh_manager::import_dialog::{
+    SshConfigImportDialog, SshConfigImportEvent,
 };
 
 use warp_ssh_manager::{
@@ -87,6 +91,10 @@ pub enum SshManagerPanelAction {
     ToggleAllFolders,
     /// 双击 server 行 = 连接(开新 tab)。Folder 双击 = 两次 toggle 抵消 no-op。
     DoubleClick(String),
+    /// 打开 ~/.ssh/config 导入对话框。
+    ImportConfig,
+    /// 导入对话框关闭(完成/取消/出错)。
+    DismissImportDialog,
 }
 
 #[derive(Clone, Debug)]
@@ -132,6 +140,7 @@ pub struct SshManagerPanel {
 
     add_folder_btn: MouseStateHandle,
     add_server_btn: MouseStateHandle,
+    import_btn: MouseStateHandle,
     toggle_all_btn: MouseStateHandle,
     row_states: HashMap<String, MouseStateHandle>,
     /// 每行的 DraggableState — 跨渲染保持拖拽进度,所以必须 cache 在 view state。
@@ -143,6 +152,9 @@ pub struct SshManagerPanel {
 
     /// 当前正在重命名的节点(编辑器 + node_id)。
     rename_state: Option<RenameState>,
+
+    /// ~/.ssh/config 导入对话框。None = 未打开。
+    import_dialog: Option<ViewHandle<SshConfigImportDialog>>,
 }
 
 impl SshManagerPanel {
@@ -153,6 +165,7 @@ impl SshManagerPanel {
             selected_id: None,
             add_folder_btn: MouseStateHandle::default(),
             add_server_btn: MouseStateHandle::default(),
+            import_btn: MouseStateHandle::default(),
             toggle_all_btn: MouseStateHandle::default(),
             row_states: HashMap::new(),
             row_drag_states: HashMap::new(),
@@ -162,6 +175,7 @@ impl SshManagerPanel {
                 .map(|_| MouseStateHandle::default())
                 .collect(),
             rename_state: None,
+            import_dialog: None,
         };
         me.refresh_tree(ctx);
 
@@ -247,6 +261,13 @@ impl SshManagerPanel {
             auth_type: AuthType::Password,
             key_path: None,
             last_connected_at: None,
+            proxy_jump: None,
+            connect_timeout_secs: None,
+            keepalive_interval_secs: None,
+            keepalive_count_max: None,
+            source: None,
+            host_key_algorithms: None,
+            pubkey_accepted_key_types: None,
         };
         let result = warp_ssh_manager::with_conn(|c| {
             let name = unique_name(c, parent.as_deref(), "New server")?;
@@ -613,6 +634,36 @@ impl SshManagerPanel {
         });
     }
 
+    fn on_import_config(&mut self, ctx: &mut ViewContext<Self>) {
+        if self.import_dialog.is_some() {
+            return; // 已打开
+        }
+        let dialog = ctx.add_typed_action_view(|ctx| SshConfigImportDialog::new(ctx));
+        let dialog_clone = dialog.clone();
+        ctx.subscribe_to_view(&dialog, move |me, _, event, ctx| {
+            match event {
+                SshConfigImportEvent::ImportComplete(_) => {
+                    me.refresh_tree(ctx);
+                    me.import_dialog = None;
+                }
+                SshConfigImportEvent::Cancelled => {
+                    me.import_dialog = None;
+                    ctx.notify();
+                }
+                SshConfigImportEvent::Error(_) => {
+                    // 保持对话框打开让用户看到错误信息,点 dismiss 再关。
+                }
+            }
+        });
+        self.import_dialog = Some(dialog_clone);
+        ctx.notify();
+    }
+
+    fn on_dismiss_import_dialog(&mut self, ctx: &mut ViewContext<Self>) {
+        self.import_dialog = None;
+        ctx.notify();
+    }
+
     fn parent_for_new_node(&self) -> Option<String> {
         let id = self.selected_id.as_ref()?;
         let node = self.nodes.iter().find(|n| &n.id == id)?;
@@ -655,7 +706,7 @@ impl SshManagerPanel {
             .finish()
         };
 
-        // 左侧组:新建按钮
+        // 左侧组:新建按钮 + 导入
         let left_group = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(4.0)
@@ -668,6 +719,11 @@ impl SshManagerPanel {
                 crate::ui_components::icons::Icon::Plus,
                 self.add_server_btn.clone(),
                 SshManagerPanelAction::AddServer,
+            ))
+            .with_child(make_btn(
+                crate::ui_components::icons::Icon::Download,
+                self.import_btn.clone(),
+                SshManagerPanelAction::ImportConfig,
             ))
             .with_main_axis_size(MainAxisSize::Min)
             .finish();
@@ -1087,6 +1143,8 @@ impl TypedActionView for SshManagerPanel {
             }
             SshManagerPanelAction::ToggleAllFolders => self.on_toggle_all_folders(ctx),
             SshManagerPanelAction::DoubleClick(id) => self.on_double_click(id.clone(), ctx),
+            SshManagerPanelAction::ImportConfig => self.on_import_config(ctx),
+            SshManagerPanelAction::DismissImportDialog => self.on_dismiss_import_dialog(ctx),
         }
     }
 }
@@ -1126,21 +1184,31 @@ impl View for SshManagerPanel {
 
         let positioned_panel = SavePosition::new(panel_content, SSH_PANEL_POSITION_ID).finish();
 
-        let Some(position) = self.context_menu_position else {
-            return positioned_panel;
-        };
+        let has_context_menu = self.context_menu_position.is_some();
+        let has_import_dialog = self.import_dialog.is_some();
 
-        let menu_el = self.render_context_menu(appearance);
-        let positioning = OffsetPositioning::offset_from_parent(
-            position,
-            ParentOffsetBounds::ParentByPosition,
-            ParentAnchor::TopLeft,
-            ChildAnchor::TopLeft,
-        );
+        if !has_context_menu && !has_import_dialog {
+            return positioned_panel;
+        }
 
         let mut stack = Stack::new();
         stack.add_child(positioned_panel);
-        stack.add_positioned_overlay_child(menu_el, positioning);
+
+        if let Some(position) = self.context_menu_position {
+            let menu_el = self.render_context_menu(appearance);
+            let positioning = OffsetPositioning::offset_from_parent(
+                position,
+                ParentOffsetBounds::ParentByPosition,
+                ParentAnchor::TopLeft,
+                ChildAnchor::TopLeft,
+            );
+            stack.add_positioned_overlay_child(menu_el, positioning);
+        }
+
+        if let Some(dialog_handle) = &self.import_dialog {
+            stack.add_overlay_child(ChildView::new(dialog_handle).finish());
+        }
+
         stack.finish()
     }
 }

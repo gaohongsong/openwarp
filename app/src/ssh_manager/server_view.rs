@@ -50,6 +50,8 @@ pub enum SshServerAction {
     SetAuthKey,
     /// 打开系统文件选择器选私钥文件,把路径写入 key_path editor。
     PickKeyFile,
+    /// 折叠/展开 Advanced 设置区域。
+    ToggleAdvanced,
 }
 
 /// 一次性显示在 Save 按钮上方/下方的状态标签。Phase 2 用于"已保存 / 错误"提示。
@@ -75,8 +77,20 @@ pub struct SshServerView {
     password_editor: ViewHandle<EditorView>,
     key_path_editor: ViewHandle<EditorView>,
 
+    // Advanced section editors
+    proxy_jump_editor: ViewHandle<EditorView>,
+    connect_timeout_editor: ViewHandle<EditorView>,
+    keepalive_interval_editor: ViewHandle<EditorView>,
+    keepalive_count_editor: ViewHandle<EditorView>,
+    host_key_algorithms_editor: ViewHandle<EditorView>,
+    pubkey_accepted_key_types_editor: ViewHandle<EditorView>,
+
     /// 当前选中的认证方式。Save 按钮提交此值到 DB。
     auth_type: AuthType,
+
+    /// Advanced 区域是否展开。不持久化 — 重新加载后折叠。
+    advanced_expanded: bool,
+    advanced_toggle_state: MouseStateHandle,
 
     save_btn_state: MouseStateHandle,
     connect_btn_state: MouseStateHandle,
@@ -98,6 +112,14 @@ impl SshServerView {
         let password_editor = make_editor(true, "•••••••", ctx);
         let key_path_editor = make_editor(false, "/home/user/.ssh/id_ed25519", ctx);
 
+        // Advanced section editors
+        let proxy_jump_editor = make_editor(false, "bastion", ctx);
+        let connect_timeout_editor = make_editor(false, "30", ctx);
+        let keepalive_interval_editor = make_editor(false, "60", ctx);
+        let keepalive_count_editor = make_editor(false, "3", ctx);
+        let host_key_algorithms_editor = make_editor(false, "+ssh-rsa", ctx);
+        let pubkey_accepted_key_types_editor = make_editor(false, "+ssh-rsa", ctx);
+
         let pane_configuration = ctx.add_model(|_ctx| PaneConfiguration::new("SSH server"));
 
         let mut me = Self {
@@ -112,7 +134,15 @@ impl SshServerView {
             user_editor,
             password_editor,
             key_path_editor,
+            proxy_jump_editor,
+            connect_timeout_editor,
+            keepalive_interval_editor,
+            keepalive_count_editor,
+            host_key_algorithms_editor,
+            pubkey_accepted_key_types_editor,
             auth_type: AuthType::Password,
+            advanced_expanded: false,
+            advanced_toggle_state: MouseStateHandle::default(),
             save_btn_state: MouseStateHandle::default(),
             connect_btn_state: MouseStateHandle::default(),
             auth_password_btn_state: MouseStateHandle::default(),
@@ -132,6 +162,12 @@ impl SshServerView {
             me.user_editor.clone(),
             me.password_editor.clone(),
             me.key_path_editor.clone(),
+            me.proxy_jump_editor.clone(),
+            me.connect_timeout_editor.clone(),
+            me.keepalive_interval_editor.clone(),
+            me.keepalive_count_editor.clone(),
+            me.host_key_algorithms_editor.clone(),
+            me.pubkey_accepted_key_types_editor.clone(),
         ];
         for editor in editors {
             ctx.subscribe_to_view(&editor, |me, source, event, ctx| match event {
@@ -172,6 +208,12 @@ impl SshServerView {
             self.user_editor.clone(),
             self.password_editor.clone(),
             self.key_path_editor.clone(),
+            self.proxy_jump_editor.clone(),
+            self.connect_timeout_editor.clone(),
+            self.keepalive_interval_editor.clone(),
+            self.keepalive_count_editor.clone(),
+            self.host_key_algorithms_editor.clone(),
+            self.pubkey_accepted_key_types_editor.clone(),
         ];
         for editor in all {
             if editor != *active {
@@ -238,10 +280,48 @@ impl SshServerView {
             // 这里直接清空 buffer,密码保留在 keychain 里;Save 时只在 buffer 非空才写。
             self.password_editor
                 .update(ctx, |e, ctx| e.set_buffer_text("", ctx));
+
+            // Advanced 字段
+            self.proxy_jump_editor.update(ctx, |e, ctx| {
+                e.set_buffer_text(&srv.proxy_jump.clone().unwrap_or_default(), ctx)
+            });
+            self.connect_timeout_editor.update(ctx, |e, ctx| {
+                e.set_buffer_text(
+                    &srv.connect_timeout_secs
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    ctx,
+                )
+            });
+            self.keepalive_interval_editor.update(ctx, |e, ctx| {
+                e.set_buffer_text(
+                    &srv.keepalive_interval_secs
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    ctx,
+                )
+            });
+            self.keepalive_count_editor.update(ctx, |e, ctx| {
+                e.set_buffer_text(
+                    &srv.keepalive_count_max
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    ctx,
+                )
+            });
+            self.host_key_algorithms_editor.update(ctx, |e, ctx| {
+                e.set_buffer_text(&srv.host_key_algorithms.clone().unwrap_or_default(), ctx)
+            });
+            self.pubkey_accepted_key_types_editor.update(ctx, |e, ctx| {
+                e.set_buffer_text(
+                    &srv.pubkey_accepted_key_types.clone().unwrap_or_default(),
+                    ctx,
+                )
+            });
         }
 
         // `set_buffer_text` 默认让所有 editor 处于"全选"状态(buffer 替换 +
-        // 默认 selection),首次渲染会看到 6 个输入框同时被高亮。逐个 clear。
+        // 默认 selection),首次渲染会看到多个输入框同时被高亮。逐个 clear。
         let editors = [
             self.name_editor.clone(),
             self.host_editor.clone(),
@@ -249,6 +329,12 @@ impl SshServerView {
             self.user_editor.clone(),
             self.password_editor.clone(),
             self.key_path_editor.clone(),
+            self.proxy_jump_editor.clone(),
+            self.connect_timeout_editor.clone(),
+            self.keepalive_interval_editor.clone(),
+            self.keepalive_count_editor.clone(),
+            self.host_key_algorithms_editor.clone(),
+            self.pubkey_accepted_key_types_editor.clone(),
         ];
         for editor in editors {
             editor.update(ctx, |e, ctx| e.clear_selections(ctx));
@@ -291,6 +377,22 @@ impl SshServerView {
         };
 
         let key_path = key_path_text.trim().to_string();
+
+        // Advanced 字段
+        let proxy_jump_text = self.current_text(&self.proxy_jump_editor.clone(), ctx);
+        let connect_timeout_text = self.current_text(&self.connect_timeout_editor.clone(), ctx);
+        let keepalive_interval_text = self.current_text(&self.keepalive_interval_editor.clone(), ctx);
+        let keepalive_count_text = self.current_text(&self.keepalive_count_editor.clone(), ctx);
+        let proxy_jump = proxy_jump_text.trim().to_string();
+        let connect_timeout_secs: Option<u32> = connect_timeout_text.trim().parse().ok();
+        let keepalive_interval_secs: Option<u32> = keepalive_interval_text.trim().parse().ok();
+        let keepalive_count_max: Option<u32> = keepalive_count_text.trim().parse().ok();
+        let host_key_algorithms_text = self.current_text(&self.host_key_algorithms_editor.clone(), ctx);
+        let pubkey_accepted_key_types_text =
+            self.current_text(&self.pubkey_accepted_key_types_editor.clone(), ctx);
+        let host_key_algorithms = host_key_algorithms_text.trim().to_string();
+        let pubkey_accepted_key_types = pubkey_accepted_key_types_text.trim().to_string();
+
         let info = SshServerInfo {
             node_id: self.node_id.clone(),
             host: host.trim().to_string(),
@@ -303,6 +405,21 @@ impl SshServerView {
                 Some(key_path)
             },
             last_connected_at: self.server.as_ref().and_then(|s| s.last_connected_at),
+            proxy_jump: if proxy_jump.is_empty() { None } else { Some(proxy_jump) },
+            connect_timeout_secs,
+            keepalive_interval_secs,
+            keepalive_count_max,
+            source: self.server.as_ref().and_then(|s| s.source.clone()),
+            host_key_algorithms: if host_key_algorithms.is_empty() {
+                None
+            } else {
+                Some(host_key_algorithms)
+            },
+            pubkey_accepted_key_types: if pubkey_accepted_key_types.is_empty() {
+                None
+            } else {
+                Some(pubkey_accepted_key_types)
+            },
         };
 
         // 2. 写 DB(rename + update_server)
@@ -369,6 +486,19 @@ impl SshServerView {
             return;
         }
         let key_path = key_path_text.trim().to_string();
+
+        // Advanced 字段
+        let proxy_jump_text = self.current_text(&self.proxy_jump_editor.clone(), ctx);
+        let connect_timeout_text = self.current_text(&self.connect_timeout_editor.clone(), ctx);
+        let keepalive_interval_text = self.current_text(&self.keepalive_interval_editor.clone(), ctx);
+        let keepalive_count_text = self.current_text(&self.keepalive_count_editor.clone(), ctx);
+        let proxy_jump = proxy_jump_text.trim().to_string();
+        let host_key_algorithms_text = self.current_text(&self.host_key_algorithms_editor.clone(), ctx);
+        let pubkey_accepted_key_types_text =
+            self.current_text(&self.pubkey_accepted_key_types_editor.clone(), ctx);
+        let host_key_algorithms = host_key_algorithms_text.trim().to_string();
+        let pubkey_accepted_key_types = pubkey_accepted_key_types_text.trim().to_string();
+
         let server = SshServerInfo {
             node_id: self.node_id.clone(),
             host,
@@ -381,6 +511,21 @@ impl SshServerView {
                 Some(key_path)
             },
             last_connected_at: self.server.as_ref().and_then(|s| s.last_connected_at),
+            proxy_jump: if proxy_jump.is_empty() { None } else { Some(proxy_jump) },
+            connect_timeout_secs: connect_timeout_text.trim().parse().ok(),
+            keepalive_interval_secs: keepalive_interval_text.trim().parse().ok(),
+            keepalive_count_max: keepalive_count_text.trim().parse().ok(),
+            source: self.server.as_ref().and_then(|s| s.source.clone()),
+            host_key_algorithms: if host_key_algorithms.is_empty() {
+                None
+            } else {
+                Some(host_key_algorithms)
+            },
+            pubkey_accepted_key_types: if pubkey_accepted_key_types.is_empty() {
+                None
+            } else {
+                Some(pubkey_accepted_key_types)
+            },
         };
         ctx.dispatch_typed_action(&crate::workspace::WorkspaceAction::OpenSshTerminal {
             node_id: self.node_id.clone(),
@@ -547,6 +692,89 @@ impl SshServerView {
         )
         .with_margin_bottom(FIELD_BLOCK_MARGIN_BOTTOM)
         .finish()
+    }
+
+    fn render_advanced_section(&self, appearance: &Appearance) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let chevron_icon = if self.advanced_expanded {
+            crate::ui_components::icons::Icon::ChevronDown
+        } else {
+            crate::ui_components::icons::Icon::ChevronRight
+        };
+        let icon_color = theme.sub_text_color(theme.background());
+        let icon_el = ConstrainedBox::new(chevron_icon.to_warpui_icon(icon_color).finish())
+            .with_width(14.0)
+            .with_height(14.0)
+            .finish();
+        let label = Text::new_inline(
+            crate::t!("workspace-left-panel-ssh-manager-advanced"),
+            appearance.ui_font_family(),
+            appearance.ui_font_size(),
+        )
+        .with_color(theme.sub_text_color(theme.background()).into())
+        .finish();
+
+        let header_row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_spacing(8.0)
+            .with_child(icon_el)
+            .with_child(label)
+            .with_main_axis_size(MainAxisSize::Min)
+            .finish();
+
+        let toggle = Hoverable::new(self.advanced_toggle_state.clone(), move |_| {
+            Container::new(header_row)
+                .with_padding_top(8.0)
+                .with_padding_bottom(4.0)
+                .finish()
+        })
+        .with_cursor(Cursor::PointingHand)
+        .on_click(move |ctx, _, _| {
+            ctx.dispatch_typed_action(SshServerAction::ToggleAdvanced);
+        })
+        .finish();
+
+        let mut col = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
+        col.add_child(toggle);
+
+        if self.advanced_expanded {
+            col.add_child(self.render_text_field(
+                &crate::t!("workspace-left-panel-ssh-manager-detail-proxy-jump"),
+                &self.proxy_jump_editor,
+                appearance,
+            ));
+            col.add_child(self.render_text_field(
+                &crate::t!("workspace-left-panel-ssh-manager-detail-connect-timeout"),
+                &self.connect_timeout_editor,
+                appearance,
+            ));
+            col.add_child(self.render_text_field(
+                &crate::t!("workspace-left-panel-ssh-manager-detail-keepalive-interval"),
+                &self.keepalive_interval_editor,
+                appearance,
+            ));
+            col.add_child(self.render_text_field(
+                &crate::t!("workspace-left-panel-ssh-manager-detail-keepalive-count"),
+                &self.keepalive_count_editor,
+                appearance,
+            ));
+            col.add_child(self.render_text_field(
+                &crate::t!("workspace-left-panel-ssh-manager-detail-host-key-algorithms"),
+                &self.host_key_algorithms_editor,
+                appearance,
+            ));
+            col.add_child(self.render_text_field(
+                &crate::t!(
+                    "workspace-left-panel-ssh-manager-detail-pubkey-accepted-key-types"
+                ),
+                &self.pubkey_accepted_key_types_editor,
+                appearance,
+            ));
+        }
+
+        Container::new(col.finish())
+            .with_margin_top(8.0)
+            .finish()
     }
 
     fn render_auth_toggle(&self, appearance: &Appearance) -> Box<dyn Element> {
@@ -733,6 +961,10 @@ impl TypedActionView for SshServerView {
             SshServerAction::SetAuthPassword => self.on_set_auth(AuthType::Password, ctx),
             SshServerAction::SetAuthKey => self.on_set_auth(AuthType::Key, ctx),
             SshServerAction::PickKeyFile => self.on_pick_key_file(ctx),
+            SshServerAction::ToggleAdvanced => {
+                self.advanced_expanded = !self.advanced_expanded;
+                ctx.notify();
+            }
         }
     }
 }
@@ -852,6 +1084,9 @@ impl View for SshServerView {
                 ));
             }
         }
+
+        // Advanced 可折叠区域
+        col.add_child(self.render_advanced_section(appearance));
 
         let theme = appearance.theme();
         let inner = ConstrainedBox::new(

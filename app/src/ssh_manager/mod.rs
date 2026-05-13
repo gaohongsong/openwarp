@@ -3,6 +3,7 @@
 //!
 //! 数据层在独立 crate `warp_ssh_manager`(`crates/warp_ssh_manager/`)。
 
+pub mod import_dialog;
 pub mod notifier;
 pub mod panel;
 pub mod secret_injector;

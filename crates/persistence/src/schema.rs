@@ -376,6 +376,13 @@ diesel::table! {
         auth_type -> Text,
         key_path -> Nullable<Text>,
         last_connected_at -> Nullable<Timestamp>,
+        proxy_jump -> Nullable<Text>,
+        connect_timeout_secs -> Nullable<Integer>,
+        keepalive_interval_secs -> Nullable<Integer>,
+        keepalive_count_max -> Nullable<Integer>,
+        source -> Nullable<Text>,
+        host_key_algorithms -> Nullable<Text>,
+        pubkey_accepted_key_types -> Nullable<Text>,
     }
 }
 
