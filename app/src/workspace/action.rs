@@ -209,6 +209,11 @@ pub enum WorkspaceAction {
     /// Open the log directory in the system file explorer with the current log file selected.
     #[cfg(not(target_family = "wasm"))]
     ViewLogs,
+    /// Prompt the user with a native save-file dialog and write the log
+    /// bundle (recent logs + MCP / update logs + diagnostic manifest) to
+    /// the chosen path. Used by the "Export logs" link on the About page.
+    #[cfg(not(target_family = "wasm"))]
+    ExportLogsToPath,
     ChangeCursor(Cursor),
     ToggleBlockSnackbar,
     ToggleErrorUnderlining,
@@ -531,10 +536,6 @@ pub enum WorkspaceAction {
     ToggleNotificationMailbox {
         select_first: bool,
     },
-    ToggleAgentManagementView,
-    ViewAgentRunsForEnvironment {
-        environment_id: String,
-    },
     /// Show the rewind confirmation dialog before rewinding an AI conversation
     ShowRewindConfirmationDialog {
         ai_block_view_id: EntityId,
@@ -829,8 +830,6 @@ impl WorkspaceAction {
             | OpenGlobalSearch
             | ToggleConversationListView
             | ToggleNotificationMailbox { .. }
-            | ToggleAgentManagementView
-            | ViewAgentRunsForEnvironment { .. }
             | ToggleAIDocumentPane { .. }
             | HideAIDocumentPanes
             | OpenAIDocumentPane { .. }
@@ -864,6 +863,8 @@ impl WorkspaceAction {
             | UseLocalOpenCodeWarpPlugin => false,
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
+            #[cfg(not(target_family = "wasm"))]
+            ExportLogsToPath => false,
             #[cfg(target_os = "macos")]
             SampleProcess => false,
             #[cfg(target_os = "macos")]

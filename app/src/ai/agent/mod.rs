@@ -732,7 +732,7 @@ impl ProgrammingLanguage {
                 "yaml" | "yml" => Some("yaml"),
                 "cpp" | "c++" => Some("cpp"),
                 "java" => Some("java"),
-                "groovy" => Some("java"),
+                "groovy" | "gradle" => Some("groovy"),
                 "shell" => Some("sh"),
                 "c#" | "csharp" => Some("cs"),
                 "html" => Some("html"),
@@ -755,6 +755,20 @@ impl ProgrammingLanguage {
                 "xml" => Some("xml"),
                 "vue" => Some("vue"),
                 "dockerfile" | "docker" | "containerfile" => Some("dockerfile"),
+                "dart" => Some("dart"),
+                "zig" => Some("zig"),
+                "scss" => Some("scss"),
+                "r" => Some("r"),
+                "julia" | "jl" => Some("jl"),
+                "ocaml" | "ml" => Some("ml"),
+                "erlang" | "erl" => Some("erl"),
+                "nix" => Some("nix"),
+                "solidity" | "sol" => Some("sol"),
+                "graphql" | "gql" => Some("graphql"),
+                "proto" | "protobuf" => Some("proto"),
+                "clojure" | "clj" => Some("clj"),
+                "elm" => Some("elm"),
+                "cmake" => Some("cmake"),
                 _ => None,
             },
             Self::Shell(ShellType::PowerShell) => Some("ps1"),
@@ -2280,7 +2294,6 @@ pub enum UserQueryMode {
     #[default]
     Normal,
     Plan,
-    Orchestrate,
 }
 
 // TODO(zachbai): Refactor this to consolidate with `LongRunningCommandSnapshot` and `Snapshot`
@@ -2526,9 +2539,6 @@ impl AIAgentInput {
                 ..
             } => match user_query_mode {
                 UserQueryMode::Plan => Some(format!("{} {query}", commands::PLAN.name)),
-                UserQueryMode::Orchestrate => {
-                    Some(format!("{} {query}", commands::ORCHESTRATE.name))
-                }
                 UserQueryMode::Normal => Some(query.clone()),
             },
             Self::CreateNewProject { query, .. } => Some(query.clone()),
